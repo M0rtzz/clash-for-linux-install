@@ -61,9 +61,13 @@ sudo bash uninstall.sh --system --prefix /opt/clashctl
 
 ```bash
 clashctl init
+source ${HOME}/.bashrc
 clashctl sub add '<subscription-url>'
 clashctl on
 ```
+
+`clashctl init` 会为当前用户注册 Bash/Zsh shell hook，因此 `clashui`、`clashsub`、
+`clashnode` 等兼容命令会在新 shell 中可用；当前 shell 可执行上面的 `source` 命令立即加载。
 
 system 模式使用以下用户私有目录，并默认以 700/600 权限保护订阅 URL 和运行配置：
 

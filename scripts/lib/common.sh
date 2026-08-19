@@ -3,6 +3,7 @@
 # shellcheck disable=SC2034
 CLASHCTL_INSTALL_MODE=${CLASHCTL_INSTALL_MODE:-user}
 CLASHCTL_UID=$(id -u)
+CLASHCTL_SYSTEM_SHARE_DIR=${CLASHCTL_SYSTEM_SHARE_DIR:-/usr/local/share/clashctl}
 
 if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
     CLASHCTL_ROOT=${CLASHCTL_ROOT:-/usr/local/lib/clashctl}

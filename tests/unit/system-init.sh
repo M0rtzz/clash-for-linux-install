@@ -31,8 +31,16 @@ export XDG_CONFIG_HOME=${TEST_ROOT}/config
 export XDG_DATA_HOME=${TEST_ROOT}/data
 export XDG_STATE_HOME=${TEST_ROOT}/state
 export XDG_RUNTIME_DIR=${TEST_ROOT}/runtime
+export CLASHCTL_SYSTEM_SHARE_DIR=${TEST_ROOT}/share
+export SHELL=/bin/bash
 
-bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" init >/dev/null
+/usr/bin/install -d -m 755 "${CLASHCTL_SYSTEM_SHARE_DIR}/shell" "${USER_HOME}"
+/usr/bin/install -m 644 "${REPOSITORY_ROOT}/scripts/shell/clashctl.sh" \
+    "${CLASHCTL_SYSTEM_SHARE_DIR}/shell/clashctl.sh"
+/usr/bin/install -m 644 /dev/null "${USER_HOME}/.bashrc"
+
+init_output=$(bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" init)
+grep -Fq "source ${HOME}/.bashrc" <<<"${init_output}"
 RUNTIME_CONFIG=${XDG_DATA_HOME}/clashctl/runtime.yaml
 MIXIN_CONFIG=${XDG_CONFIG_HOME}/clashctl/mixin.yaml
 [ -s "${RUNTIME_CONFIG}" ]
@@ -50,6 +58,8 @@ ports_before=$("${INSTALL_ROOT}/bin/yq" '[."mixed-port", ."external-controller"]
 bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" init >/dev/null
 ports_after=$("${INSTALL_ROOT}/bin/yq" '[."mixed-port", ."external-controller"] | join("|")' "${MIXIN_CONFIG}")
 [ "${ports_before}" = "${ports_after}" ]
+[ "$(grep -Fc -- ". ${CLASHCTL_SYSTEM_SHARE_DIR}/shell/clashctl.sh" "${USER_HOME}/.bashrc")" -eq 1 ]
+bash -c 'source "${HOME}/.bashrc" && declare -F clashui >/dev/null'
 runtime_hash=$(sha256sum "${RUNTIME_CONFIG}" | awk '{print $1}')
 if bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" tun on >/dev/null 2>&1; then
     printf '%s\n' 'TUN unexpectedly succeeded in system mode' >&2
