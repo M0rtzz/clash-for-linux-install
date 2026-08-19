@@ -3,9 +3,9 @@
 set -euo pipefail
 
 REPOSITORY_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)
-YQ_ARCHIVE=${REPOSITORY_ROOT}/resources/zip/yq_linux_amd64.tar.gz
-SUBCONVERTER_ARCHIVE=${REPOSITORY_ROOT}/resources/zip/subconverter_linux64.tar.gz
-MIHOMO_ARCHIVE=$(find "${REPOSITORY_ROOT}/resources/zip" -maxdepth 1 -name 'mihomo*.gz' -print -quit 2>/dev/null)
+YQ_ARCHIVE=${REPOSITORY_ROOT}/archives/yq_linux_amd64.tar.gz
+SUBCONVERTER_ARCHIVE=${REPOSITORY_ROOT}/archives/subconverter_linux64.tar.gz
+MIHOMO_ARCHIVE=$(find "${REPOSITORY_ROOT}/archives" -maxdepth 1 -name 'mihomo*.gz' -print -quit 2>/dev/null)
 if [ ! -f "${YQ_ARCHIVE}" ] || [ ! -f "${SUBCONVERTER_ARCHIVE}" ] || [ -z "${MIHOMO_ARCHIVE}" ]; then
     printf '%s\n' 'SKIP: local dependency archives are unavailable'
     exit 0

@@ -17,10 +17,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Prepare local dependency archives
+      - name: Configure deterministic dependency downloads
         run: |
-          mkdir -p archives
-          cp resources/zip/* archives/
           sed -i 's/^GH_PROXY=.*/GH_PROXY=/' .env.install
           sed -i 's/^CLASHCTL_CHECK_LATEST_VERSION=.*/CLASHCTL_CHECK_LATEST_VERSION=0/' .env.install
 

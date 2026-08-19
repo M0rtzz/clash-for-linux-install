@@ -3,8 +3,8 @@
 set -euo pipefail
 
 REPOSITORY_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)
-YQ_ARCHIVE=${REPOSITORY_ROOT}/resources/zip/yq_linux_amd64.tar.gz
-SUBCONVERTER_ARCHIVE=${REPOSITORY_ROOT}/resources/zip/subconverter_linux64.tar.gz
+YQ_ARCHIVE=${REPOSITORY_ROOT}/archives/yq_linux_amd64.tar.gz
+SUBCONVERTER_ARCHIVE=${REPOSITORY_ROOT}/archives/subconverter_linux64.tar.gz
 if [ ! -f "${YQ_ARCHIVE}" ] || [ ! -f "${SUBCONVERTER_ARCHIVE}" ]; then
     printf '%s\n' 'SKIP: local dependency archives are unavailable'
     exit 0
