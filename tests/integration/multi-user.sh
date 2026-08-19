@@ -44,7 +44,12 @@ as_user() {
     shift
     local user_home
     user_home=$(getent passwd "${user_name}" | cut -d: -f6)
-    runuser -u "${user_name}" -- env -u DBUS_SESSION_BUS_ADDRESS HOME="${user_home}" XDG_RUNTIME_DIR="${user_home}/run" \
+    runuser -u "${user_name}" -- env -u DBUS_SESSION_BUS_ADDRESS \
+        HOME="${user_home}" \
+        XDG_CONFIG_HOME="${user_home}/.config" \
+        XDG_DATA_HOME="${user_home}/.local/share" \
+        XDG_STATE_HOME="${user_home}/.local/state" \
+        XDG_RUNTIME_DIR="${user_home}/run" \
         PATH=/usr/local/bin:/usr/bin:/bin "${@}"
 }
 
