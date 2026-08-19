@@ -5,6 +5,7 @@
 
 for lib_file in "$CLASHCTL_SRC"/scripts/lib/*.sh; do
     [ -f "$lib_file" ] || continue
+    # shellcheck disable=SC1090
     . "$lib_file"
 done
 
@@ -12,9 +13,14 @@ ARCHIVE_BASE_DIR="${CLASHCTL_SRC}/archives"
 ZIP_BASE_DIR="${ARCHIVE_BASE_DIR}"
 
 CLASHCTL_CMD_DIR="${CLASHCTL_HOME}/scripts/cmd"
+CLASHCTL_SYSTEM_BIN_DIR=/usr/local/bin
+CLASHCTL_SYSTEM_SHARE_DIR=/usr/local/share/clashctl
+CLASHCTL_SYSTEM_USER_UNIT_DIR=/usr/local/lib/systemd/user
+CLASHCTL_SYSTEM_PROFILE_FILE=/etc/profile.d/clashctl.sh
 
 valid_required() {
-    local required_cmds=("xz" "pgrep" "pkill" "curl" "tar" 'unzip' 'gzip' 'shuf')
+    local required_cmds=("xz" "curl" "tar" 'unzip' 'gzip' 'shuf')
+    [ "${CLASHCTL_INSTALL_MODE}" = system ] || required_cmds+=("pgrep" "pkill")
     local missing=()
     for cmd in "${required_cmds[@]}"; do
         command -v "$cmd" >&/dev/null || missing+=("$cmd")
@@ -29,6 +35,12 @@ valid_required() {
 valid_env() {
     valid_required
 
+    if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
+        _is_root || _errorcat 'system 安装必须以 root 执行' || exit 1
+        _validate_system_root || exit 1
+        return 0
+    fi
+
     [ -d "$CLASHCTL_HOME" ] && {
         _errorcat "请先执行卸载脚本,以清除安装路径：$CLASHCTL_HOME"
         exit
@@ -40,8 +52,27 @@ valid_env() {
 }
 
 parse_args() {
-    for arg in "$@"; do
+    local arg_index=1 arg
+    CLASHCTL_PREFIX_ARG=${CLASHCTL_PREFIX_ARG:-0}
+    while [ "${arg_index}" -le "${#}" ]; do
+        arg=${!arg_index}
         case $arg in
+        --system)
+            CLASHCTL_INSTALL_MODE=system
+            ;;
+        --prefix=*)
+            CLASHCTL_PREFIX_ARG=1
+            CLASHCTL_ROOT=${arg#*=}
+            ;;
+        --prefix)
+            CLASHCTL_PREFIX_ARG=1
+            arg_index=$((arg_index + 1))
+            [ "${arg_index}" -le "${#}" ] || {
+                _errorcat '错误：--prefix 需要一个目录参数'
+                return 1
+            }
+            CLASHCTL_ROOT=${!arg_index}
+            ;;
         mihomo)
             CLASHCTL_KERNEL=mihomo
             ;;
@@ -49,10 +80,140 @@ parse_args() {
             CLASHCTL_KERNEL=clash
             ;;
         http*)
+            # shellcheck disable=SC2034
             CLASHCTL_SUB_URL=$arg
             ;;
         esac
+        arg_index=$((arg_index + 1))
     done
+    if [ "${CLASHCTL_INSTALL_MODE}" != system ] && [ "${CLASHCTL_PREFIX_ARG}" -eq 1 ]; then
+        _errorcat '--prefix 仅在 --system 模式下有效'
+        return 1
+    fi
+}
+
+_validate_system_root() {
+    local root=${CLASHCTL_ROOT} allow_unmarked=${1:-false}
+    case "${root}" in
+    /*) ;;
+    *)
+        _errorcat 'system 安装路径必须是绝对路径'
+        return 1
+        ;;
+    esac
+    case "${root}" in
+    / | *'//' | */../* | */.. | */./* | */.)
+        _errorcat "system 安装路径不安全：${root}"
+        return 1
+        ;;
+    esac
+    [ -n "${root}" ] || {
+        _errorcat 'system 安装路径不能为空'
+        return 1
+    }
+    [ ! -L "${root}" ] || {
+        _errorcat "system 安装路径不能是符号链接：${root}"
+        return 1
+    }
+    if _path_contains_symlink "${root}"; then
+        _errorcat "system 安装路径包含符号链接：${root}"
+        return 1
+    fi
+    if _is_root && [ -e "${root}" ] && [ "$(stat -c %u "${root}" 2>/dev/null)" != 0 ]; then
+        _errorcat "system 安装路径必须由 root 拥有：${root}"
+        return 1
+    fi
+    if [ -e "${root}" ]; then
+        [ -d "${root}" ] || {
+            _errorcat "system 安装路径必须是目录：${root}"
+            return 1
+        }
+        if [ "${allow_unmarked}" != true ] && [ ! -e "${root}/.clashctl-system" ] &&
+            [ -n "$(ls -A -- "${root}" 2>/dev/null)" ]; then
+            _errorcat "system 安装路径必须为空或为已有的 clashctl 安装：${root}"
+            return 1
+        fi
+    fi
+
+    local parent=${root}
+    while [ ! -e "${parent}" ]; do
+        parent=${parent%/*}
+        [ -n "${parent}" ] || parent=/
+    done
+    if [ ! -d "${parent}" ] || [ ! -w "${parent}" ]; then
+        _errorcat "system 安装路径的父目录不可写：${root}"
+        return 1
+    fi
+}
+
+install_system_directories() {
+    /usr/bin/install -d -m 755 \
+        "${CLASHCTL_ROOT}" \
+        "${CLASHCTL_ROOT}/bin" \
+        "${CLASHCTL_ROOT}/scripts" \
+        "${CLASHCTL_ROOT}/resources" \
+        "${CLASHCTL_SYSTEM_BIN_DIR}" \
+        "${CLASHCTL_SYSTEM_SHARE_DIR}/shell" \
+        "${CLASHCTL_SYSTEM_USER_UNIT_DIR}"
+}
+
+install_system_clashctl() {
+    /usr/bin/install -m 644 "${CLASHCTL_SRC}/.env" "${CLASHCTL_ROOT}/.env"
+    sed -i "s|^CLASHCTL_KERNEL=.*|CLASHCTL_KERNEL=${CLASHCTL_KERNEL}|" "${CLASHCTL_ROOT}/.env"
+
+    local escaped_root=${CLASHCTL_ROOT//\\/\\\\}
+    escaped_root=${escaped_root//&/\\&}
+    escaped_root=${escaped_root//|/\\|}
+    local escaped_kernel=${CLASHCTL_KERNEL//\\/\\\\}
+    escaped_kernel=${escaped_kernel//&/\\&}
+    escaped_kernel=${escaped_kernel//|/\\|}
+
+    /bin/cp -a "${CLASHCTL_SRC}/scripts/cmd" "${CLASHCTL_ROOT}/scripts/"
+    /bin/cp -a "${CLASHCTL_SRC}/scripts/lib" "${CLASHCTL_ROOT}/scripts/"
+    sed -e "s|@CLASHCTL_ROOT@|${escaped_root}|g" \
+        -e "s|@CLASHCTL_KERNEL@|${escaped_kernel}|g" \
+        "${CLASHCTL_SRC}/scripts/run-mihomo" >"${CLASHCTL_ROOT}/scripts/run-mihomo"
+    chmod 755 "${CLASHCTL_ROOT}/scripts/run-mihomo"
+
+    local resource name
+    for resource in "${CLASHCTL_SRC}"/resources/*; do
+        [ -e "${resource}" ] || continue
+        name=${resource##*/}
+        case "${name}" in zip) continue ;; esac
+        /bin/cp -a "${resource}" "${CLASHCTL_ROOT}/resources/"
+    done
+
+    sed "s|@CLASHCTL_ROOT@|${escaped_root}|g" \
+        "${CLASHCTL_SRC}/scripts/clashctl-exec" >"${CLASHCTL_ROOT}/bin/clashctl"
+    chmod 755 "${CLASHCTL_ROOT}/bin/clashctl"
+    /bin/ln -sfn "${CLASHCTL_ROOT}/bin/clashctl" \
+        "${CLASHCTL_SYSTEM_BIN_DIR}/clashctl"
+    /usr/bin/install -m 644 "${CLASHCTL_SRC}/scripts/shell/clashctl.sh" \
+        "${CLASHCTL_SYSTEM_SHARE_DIR}/shell/clashctl.sh"
+    /usr/bin/install -m 644 "${CLASHCTL_SRC}/scripts/shell/clashctl.fish" \
+        "${CLASHCTL_SYSTEM_SHARE_DIR}/shell/clashctl.fish"
+    sed -e "s|@CLASHCTL_ROOT@|${escaped_root}|g" \
+        -e "s|@CLASHCTL_KERNEL@|${escaped_kernel}|g" \
+        "${CLASHCTL_SRC}/scripts/init/clashctl-user.service" \
+        >"${CLASHCTL_SYSTEM_USER_UNIT_DIR}/clashctl.service"
+    chmod 644 "${CLASHCTL_SYSTEM_USER_UNIT_DIR}/clashctl.service"
+
+    printf '%s\n' ". ${CLASHCTL_SYSTEM_SHARE_DIR}/shell/clashctl.sh" \
+        >"${CLASHCTL_SYSTEM_PROFILE_FILE}"
+    chmod 644 "${CLASHCTL_SYSTEM_PROFILE_FILE}"
+    if [ -d /etc/fish/conf.d ]; then
+        /usr/bin/install -m 644 "${CLASHCTL_SRC}/scripts/shell/clashctl.fish" \
+            /etc/fish/conf.d/clashctl.fish
+    fi
+    printf '%s\n' 'clashctl system installation' >"${CLASHCTL_ROOT}/.clashctl-system"
+    chmod 644 "${CLASHCTL_ROOT}/.clashctl-system"
+    find "${CLASHCTL_ROOT}" -type d -exec chmod 755 {} +
+    find "${CLASHCTL_ROOT}" -type f ! -perm /111 -exec chmod 644 {} +
+    find "${CLASHCTL_ROOT}" -type f -perm /111 -exec chmod 755 {} +
+    chown -R root:root "${CLASHCTL_ROOT}" "${CLASHCTL_SYSTEM_SHARE_DIR}"
+    chown -h root:root "${CLASHCTL_SYSTEM_BIN_DIR}/clashctl"
+    chown root:root "${CLASHCTL_SYSTEM_PROFILE_FILE}" \
+        "${CLASHCTL_SYSTEM_USER_UNIT_DIR}/clashctl.service"
 }
 
 prepare_zip() {
@@ -241,8 +402,13 @@ unzip_zip() {
     tar -xf "$ZIP_YQ" -C "${BIN_BASE_DIR}"
     /bin/mv -f "${BIN_BASE_DIR}"/yq_* "${BIN_BASE_DIR}/yq"
     tar -xf "$ZIP_SUBCONVERTER" -C "$BIN_BASE_DIR"
-    /bin/cp "$BIN_SUBCONVERTER_DIR/pref.example.yml" "$BIN_SUBCONVERTER_CONFIG"
-    unzip -oqq "$ZIP_UI" -d "$CLASH_RESOURCES_DIR" 2>/dev/null || tar -xf "$ZIP_UI" -C "$CLASH_RESOURCES_DIR"
+    local ui_target=${CLASH_RESOURCES_DIR}
+    if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
+        ui_target=${CLASHCTL_STATIC_DIR}
+    else
+        /bin/cp "${BIN_SUBCONVERTER_DIR}/pref.example.yml" "${BIN_SUBCONVERTER_CONFIG}"
+    fi
+    unzip -oqq "${ZIP_UI}" -d "${ui_target}" 2>/dev/null || tar -xf "${ZIP_UI}" -C "${ui_target}"
 }
 
 _set_envs() {

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 
 clashtun() {
+    if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
+        _errorcat 'system 多用户安装不支持 TUN 模式，请使用 HTTP/SOCKS 代理'
+        return 1
+    fi
     case "$1" in
     -h | --help)
         tun_help

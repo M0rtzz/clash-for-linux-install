@@ -36,6 +36,63 @@ git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/nelv
 - 可通过 `.env.install` 文件自定义安装选项。
 - 没有订阅？[click me](https://次元.net/auth/register?code=oUbI)
 
+### Server multi-user installation
+
+服务器可只安装一次程序，并让每个 Linux 用户运行独立的 mihomo 实例：
+
+```bash
+sudo bash install.sh --system
+```
+
+默认共享程序目录为 `/usr/local/lib/clashctl`，也可以指定一个专用目录：
+
+```bash
+sudo bash install.sh --system --prefix /opt/clashctl
+```
+
+`--prefix` 只改变共享程序目录；`/usr/local/bin/clashctl`、shell hook 和 systemd user unit
+仍作为系统入口安装，并会指向指定的目录。卸载自定义目录时传入相同的 prefix：
+
+```bash
+sudo bash uninstall.sh --system --prefix /opt/clashctl
+```
+
+普通用户无需 sudo，首次使用时执行：
+
+```bash
+clashctl init
+clashctl sub add '<subscription-url>'
+clashctl on
+```
+
+system 模式使用以下用户私有目录，并默认以 700/600 权限保护订阅 URL 和运行配置：
+
+```text
+${XDG_CONFIG_HOME:-${HOME}/.config}/clashctl
+${XDG_DATA_HOME:-${HOME}/.local/share}/clashctl
+${XDG_STATE_HOME:-${HOME}/.local/state}/clashctl
+${XDG_RUNTIME_DIR:-/run/user/<uid>}/clashctl
+```
+
+代理端口和 controller 端口按用户独立分配，只监听 `127.0.0.1`。system 模式不支持 TUN；原有 user 安装模式继续支持 TUN。
+
+system 安装同时提供真正的 `/usr/local/bin/clashctl` 和 shell hook。未加载 hook 时可使用：
+
+```bash
+eval "$(clashctl env)"
+```
+
+如果使用 `systemd --user`，系统需要支持用户服务的文件系统命名空间（包括
+`PrivateTmp=true` 所需的 mount namespace 和 unprivileged user namespaces）。如果检测不到可用的
+systemd user unit，clashctl 会回退到当前用户的 PID 文件与 `nohup` 生命周期管理。
+
+诊断与旧数据迁移：
+
+```bash
+clashctl doctor
+clashctl migrate
+```
+
 ## 🎯 Quick Start
 
 安装完成后，即可使用 `clashctl` 管理代理：
@@ -59,6 +116,18 @@ clashctl -h              # 查看全部命令
 
 ```bash
 bash uninstall.sh
+```
+
+system 安装由管理员卸载共享程序，不删除任何用户数据：
+
+```bash
+sudo bash uninstall.sh --system
+```
+
+普通用户可单独清理自己的配置、订阅、日志和运行状态：
+
+```bash
+clashctl uninit
 ```
 
 ## 📖 Documentation

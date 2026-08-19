@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+CLASHCTL_INSTALL_MODE=system
+if [ -n "${CLASHCTL_TEST_ROOT:-}" ]; then
+    CLASHCTL_ROOT=${CLASHCTL_TEST_ROOT}
+else
+    CLASHCTL_EXEC_PATH=$(readlink -f -- "${BASH_SOURCE[0]}" 2>/dev/null || true)
+    case "${CLASHCTL_EXEC_PATH}" in
+    */bin/clashctl) CLASHCTL_ROOT=${CLASHCTL_EXEC_PATH%/bin/clashctl} ;;
+    *) CLASHCTL_ROOT='@CLASHCTL_ROOT@' ;;
+    esac
+fi
+export CLASHCTL_INSTALL_MODE CLASHCTL_ROOT
+. "${CLASHCTL_ROOT}/scripts/cmd/clashctl.sh"
+clashctl "${@}"
