@@ -4,6 +4,7 @@ set -euo pipefail
 TEST_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 
 bash "${TEST_ROOT}/unit/system-context.sh"
+bash "${TEST_ROOT}/unit/system-prefix.sh"
 bash "${TEST_ROOT}/unit/system-init.sh"
 bash "${TEST_ROOT}/unit/system-migrate.sh"
 bash "${TEST_ROOT}/unit/system-service.sh"

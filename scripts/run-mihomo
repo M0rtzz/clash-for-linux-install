@@ -2,8 +2,15 @@
 
 set -o errexit -o pipefail
 CLASHCTL_INSTALL_MODE=system
-CLASHCTL_ROOT=/usr/local/lib/clashctl
-[ -n "${CLASHCTL_TEST_ROOT:-}" ] && CLASHCTL_ROOT=${CLASHCTL_TEST_ROOT}
+if [ -n "${CLASHCTL_TEST_ROOT:-}" ]; then
+    CLASHCTL_ROOT=${CLASHCTL_TEST_ROOT}
+else
+    CLASHCTL_RUN_PATH=$(readlink -f -- "${BASH_SOURCE[0]}" 2>/dev/null || true)
+    case "${CLASHCTL_RUN_PATH}" in
+    */scripts/run-mihomo) CLASHCTL_ROOT=${CLASHCTL_RUN_PATH%/scripts/run-mihomo} ;;
+    *) CLASHCTL_ROOT=/usr/local/lib/clashctl ;;
+    esac
+fi
 export CLASHCTL_INSTALL_MODE CLASHCTL_ROOT
 . "${CLASHCTL_ROOT}/.env" || exit 1
 for library in "${CLASHCTL_ROOT}"/scripts/lib/*.sh; do

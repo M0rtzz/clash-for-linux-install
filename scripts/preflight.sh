@@ -13,6 +13,10 @@ ARCHIVE_BASE_DIR="${CLASHCTL_SRC}/archives"
 ZIP_BASE_DIR="${ARCHIVE_BASE_DIR}"
 
 CLASHCTL_CMD_DIR="${CLASHCTL_HOME}/scripts/cmd"
+CLASHCTL_SYSTEM_BIN_DIR=/usr/local/bin
+CLASHCTL_SYSTEM_SHARE_DIR=/usr/local/share/clashctl
+CLASHCTL_SYSTEM_USER_UNIT_DIR=/usr/local/lib/systemd/user
+CLASHCTL_SYSTEM_PROFILE_FILE=/etc/profile.d/clashctl.sh
 
 valid_required() {
     local required_cmds=("xz" "curl" "tar" 'unzip' 'gzip' 'shuf')
@@ -33,8 +37,7 @@ valid_env() {
 
     if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
         _is_root || _errorcat 'system 安装必须以 root 执行' || exit 1
-        [ "${CLASHCTL_ROOT}" = /usr/local/lib/clashctl ] ||
-            _errorcat 'system 安装路径固定为 /usr/local/lib/clashctl' || exit 1
+        _validate_system_root || exit 1
         return 0
     fi
 
@@ -49,10 +52,23 @@ valid_env() {
 }
 
 parse_args() {
-    for arg in "$@"; do
+    local arg_index=1 arg
+    while [ "${arg_index}" -le "${#}" ]; do
+        arg=${!arg_index}
         case $arg in
         --system)
             CLASHCTL_INSTALL_MODE=system
+            ;;
+        --prefix=*)
+            CLASHCTL_ROOT=${arg#*=}
+            ;;
+        --prefix)
+            arg_index=$((arg_index + 1))
+            [ "${arg_index}" -le "${#}" ] || {
+                _errorcat '错误：--prefix 需要一个目录参数'
+                return 1
+            }
+            CLASHCTL_ROOT=${!arg_index}
             ;;
         mihomo)
             CLASHCTL_KERNEL=mihomo
@@ -65,7 +81,51 @@ parse_args() {
             CLASHCTL_SUB_URL=$arg
             ;;
         esac
+        arg_index=$((arg_index + 1))
     done
+}
+
+_validate_system_root() {
+    local root=${CLASHCTL_ROOT}
+    case "${root}" in
+    /*) ;;
+    *)
+        _errorcat 'system 安装路径必须是绝对路径'
+        return 1
+        ;;
+    esac
+    case "${root}" in
+    / | *'//' | */../* | */.. | */./* | */.)
+        _errorcat "system 安装路径不安全：${root}"
+        return 1
+        ;;
+    esac
+    [ -n "${root}" ] || {
+        _errorcat 'system 安装路径不能为空'
+        return 1
+    }
+    [ ! -L "${root}" ] || {
+        _errorcat "system 安装路径不能是符号链接：${root}"
+        return 1
+    }
+    if _path_contains_symlink "${root}"; then
+        _errorcat "system 安装路径包含符号链接：${root}"
+        return 1
+    fi
+    if _is_root && [ -e "${root}" ] && [ "$(stat -c %u "${root}" 2>/dev/null)" != 0 ]; then
+        _errorcat "system 安装路径必须由 root 拥有：${root}"
+        return 1
+    fi
+
+    local parent=${root}
+    while [ ! -e "${parent}" ]; do
+        parent=${parent%/*}
+        [ -n "${parent}" ] || parent=/
+    done
+    if [ ! -d "${parent}" ] || [ ! -w "${parent}" ]; then
+        _errorcat "system 安装路径的父目录不可写：${root}"
+        return 1
+    fi
 }
 
 install_system_directories() {
@@ -74,9 +134,9 @@ install_system_directories() {
         "${CLASHCTL_ROOT}/bin" \
         "${CLASHCTL_ROOT}/scripts" \
         "${CLASHCTL_ROOT}/resources" \
-        /usr/local/bin \
-        /usr/local/share/clashctl/shell \
-        /usr/local/lib/systemd/user
+        "${CLASHCTL_SYSTEM_BIN_DIR}" \
+        "${CLASHCTL_SYSTEM_SHARE_DIR}/shell" \
+        "${CLASHCTL_SYSTEM_USER_UNIT_DIR}"
 }
 
 install_system_clashctl() {
@@ -95,26 +155,38 @@ install_system_clashctl() {
         /bin/cp -a "${resource}" "${CLASHCTL_ROOT}/resources/"
     done
 
-    /usr/bin/install -m 755 "${CLASHCTL_SRC}/scripts/clashctl-exec" /usr/local/bin/clashctl
+    /usr/bin/install -m 755 "${CLASHCTL_SRC}/scripts/clashctl-exec" \
+        "${CLASHCTL_ROOT}/bin/clashctl"
+    /bin/ln -sfn "${CLASHCTL_ROOT}/bin/clashctl" \
+        "${CLASHCTL_SYSTEM_BIN_DIR}/clashctl"
     /usr/bin/install -m 644 "${CLASHCTL_SRC}/scripts/shell/clashctl.sh" \
-        /usr/local/share/clashctl/shell/clashctl.sh
+        "${CLASHCTL_SYSTEM_SHARE_DIR}/shell/clashctl.sh"
     /usr/bin/install -m 644 "${CLASHCTL_SRC}/scripts/shell/clashctl.fish" \
-        /usr/local/share/clashctl/shell/clashctl.fish
-    /usr/bin/install -m 644 "${CLASHCTL_SRC}/scripts/init/clashctl-user.service" \
-        /usr/local/lib/systemd/user/clashctl.service
+        "${CLASHCTL_SYSTEM_SHARE_DIR}/shell/clashctl.fish"
+    local escaped_root=${CLASHCTL_ROOT//\\/\\\\}
+    escaped_root=${escaped_root//&/\\&}
+    escaped_root=${escaped_root//|/\\|}
+    sed "s|@CLASHCTL_ROOT@|${escaped_root}|g" \
+        "${CLASHCTL_SRC}/scripts/init/clashctl-user.service" \
+        >"${CLASHCTL_SYSTEM_USER_UNIT_DIR}/clashctl.service"
+    chmod 644 "${CLASHCTL_SYSTEM_USER_UNIT_DIR}/clashctl.service"
 
-    printf '%s\n' '. /usr/local/share/clashctl/shell/clashctl.sh' \
-        >/etc/profile.d/clashctl.sh
-    chmod 644 /etc/profile.d/clashctl.sh
+    printf '%s\n' ". ${CLASHCTL_SYSTEM_SHARE_DIR}/shell/clashctl.sh" \
+        >"${CLASHCTL_SYSTEM_PROFILE_FILE}"
+    chmod 644 "${CLASHCTL_SYSTEM_PROFILE_FILE}"
     if [ -d /etc/fish/conf.d ]; then
         /usr/bin/install -m 644 "${CLASHCTL_SRC}/scripts/shell/clashctl.fish" \
             /etc/fish/conf.d/clashctl.fish
     fi
+    printf '%s\n' 'clashctl system installation' >"${CLASHCTL_ROOT}/.clashctl-system"
+    chmod 644 "${CLASHCTL_ROOT}/.clashctl-system"
     find "${CLASHCTL_ROOT}" -type d -exec chmod 755 {} +
     find "${CLASHCTL_ROOT}" -type f ! -perm /111 -exec chmod 644 {} +
     find "${CLASHCTL_ROOT}" -type f -perm /111 -exec chmod 755 {} +
-    chown -R root:root "${CLASHCTL_ROOT}" /usr/local/share/clashctl \
-        /usr/local/bin/clashctl /usr/local/lib/systemd/user/clashctl.service
+    chown -R root:root "${CLASHCTL_ROOT}" "${CLASHCTL_SYSTEM_SHARE_DIR}"
+    chown -h root:root "${CLASHCTL_SYSTEM_BIN_DIR}/clashctl"
+    chown root:root "${CLASHCTL_SYSTEM_PROFILE_FILE}" \
+        "${CLASHCTL_SYSTEM_USER_UNIT_DIR}/clashctl.service"
 }
 
 prepare_zip() {

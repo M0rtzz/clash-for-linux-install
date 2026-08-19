@@ -44,6 +44,19 @@ git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/nelv
 sudo bash install.sh --system
 ```
 
+默认共享程序目录为 `/usr/local/lib/clashctl`，也可以指定一个专用目录：
+
+```bash
+sudo bash install.sh --system --prefix /opt/clashctl
+```
+
+`--prefix` 只改变共享程序目录；`/usr/local/bin/clashctl`、shell hook 和 systemd user unit
+仍作为系统入口安装，并会指向指定的目录。卸载自定义目录时传入相同的 prefix：
+
+```bash
+sudo bash uninstall.sh --system --prefix /opt/clashctl
+```
+
 普通用户无需 sudo，首次使用时执行：
 
 ```bash

@@ -1,9 +1,28 @@
 #!/usr/bin/env bash
 
 CLASHCTL_SRC="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# valid_env runs before parse_args, so detect --system here as well.
-for install_arg in "${@}"; do
-    [ "${install_arg}" = --system ] && CLASHCTL_INSTALL_MODE=system
+# valid_env runs before parse_args, so detect system mode and prefix here as well.
+CLASHCTL_INSTALL_MODE=${CLASHCTL_INSTALL_MODE:-user}
+install_arg_index=1
+while [ "${install_arg_index}" -le "${#}" ]; do
+    install_arg=${!install_arg_index}
+    case "${install_arg}" in
+    --system)
+        CLASHCTL_INSTALL_MODE=system
+        ;;
+    --prefix=*)
+        CLASHCTL_ROOT=${install_arg#*=}
+        ;;
+    --prefix)
+        install_arg_index=$((install_arg_index + 1))
+        [ "${install_arg_index}" -le "${#}" ] || {
+            printf '%s\n' '错误：--prefix 需要一个目录参数' >&2
+            exit 1
+        }
+        CLASHCTL_ROOT=${!install_arg_index}
+        ;;
+    esac
+    install_arg_index=$((install_arg_index + 1))
 done
 export CLASHCTL_INSTALL_MODE
 . "$CLASHCTL_SRC/scripts/preflight.sh"
