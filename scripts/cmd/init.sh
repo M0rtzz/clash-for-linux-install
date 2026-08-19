@@ -12,7 +12,7 @@ clashinit() {
         "${BIN_YQ}" -e '
             ."allow-lan" == false and
             ."bind-address" == "127.0.0.1" and
-            (."external-controller" | test("^127\\.0\\.0\\.1:")) and
+            (."external-controller" | test("^0\\.0\\.0\\.0:")) and
             ((.secret // "") | length > 0) and
             ((."mixed-port" // .port // ."socks-port" // 0) > 0) and
             (.tun.enable != true)
@@ -41,7 +41,7 @@ clashinit() {
 
     secret=$("${BIN_YQ}" '.secret // ""' "${CLASH_CONFIG_MIXIN}")
     [ -n "${secret}" ] || secret=$(_get_random_val)
-    MIXED_PORT=${mixed_port} CONTROLLER_ADDR="127.0.0.1:${controller_port}" SECRET=${secret} \
+    MIXED_PORT=${mixed_port} CONTROLLER_ADDR="0.0.0.0:${controller_port}" SECRET=${secret} \
         "${BIN_YQ}" -i '
             ."mixed-port" = env(MIXED_PORT) |
             ."mixed-port" = (."mixed-port" | tonumber) |

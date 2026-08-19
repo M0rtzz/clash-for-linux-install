@@ -79,7 +79,7 @@ EOF
 bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" migrate >/dev/null
 MIXIN_CONFIG=${XDG_CONFIG_HOME}/clashctl/mixin.yaml
 "${INSTALL_ROOT}/bin/yq" -e '
-    (."external-controller" | test("^127\\.0\\.0\\.1:[0-9]+$")) and
+    (."external-controller" | test("^0\\.0\\.0\\.0:[0-9]+$")) and
     ((.secret // "") | length > 0) and
     (."allow-lan" == false) and
     (."bind-address" == "127.0.0.1") and

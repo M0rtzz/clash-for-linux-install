@@ -54,7 +54,7 @@ clashmigrate() {
     [ -n "${secret}" ] || secret=$(_get_random_val) || return 1
 
     # system 模式必须恢复安全监听策略和禁用 TUN。
-    CONTROLLER_ADDR="127.0.0.1:${controller_port}" SECRET="${secret}" \
+    CONTROLLER_ADDR="0.0.0.0:${controller_port}" SECRET="${secret}" \
         "${BIN_YQ}" -i '
         ."external-controller" = strenv(CONTROLLER_ADDR) |
         .secret = strenv(SECRET) |

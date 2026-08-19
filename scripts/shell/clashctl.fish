@@ -27,3 +27,18 @@ function clashctl
             command clashctl $argv
     end
 end
+
+function clashon
+    clashctl on $argv
+end
+
+function clashoff
+    clashctl off $argv
+end
+
+for command_name in status ui sub node tun mixin secret log upgrade init env doctor migrate uninit help
+    set -l function_name clash$command_name
+    function $function_name --inherit-variable command_name
+        clashctl $command_name $argv
+    end
+end

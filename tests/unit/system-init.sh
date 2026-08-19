@@ -41,7 +41,7 @@ MIXIN_CONFIG=${XDG_CONFIG_HOME}/clashctl/mixin.yaml
 "${INSTALL_ROOT}/bin/yq" -e '
     ."allow-lan" == false and
     ."bind-address" == "127.0.0.1" and
-    (."external-controller" | test("^127\\.0\\.0\\.1:")) and
+    (."external-controller" | test("^0\\.0\\.0\\.0:")) and
     ((.secret // "") | length > 0) and
     (.tun.enable == false)
 ' "${RUNTIME_CONFIG}" >/dev/null
