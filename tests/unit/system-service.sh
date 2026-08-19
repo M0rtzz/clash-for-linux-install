@@ -52,9 +52,13 @@ SUBSCRIPTION=${TEST_ROOT}/subscription.yaml
     printf '%s\n' '  - {name: PROXY, type: select, proxies: [TestNode, DIRECT]}'
     printf '%s\n' 'rules:' '  - MATCH,DIRECT'
 } >"${SUBSCRIPTION}"
+SECOND_SUBSCRIPTION=${TEST_ROOT}/subscription-second.yaml
+cp "${SUBSCRIPTION}" "${SECOND_SUBSCRIPTION}"
 
 bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" init >/dev/null
 bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" sub add --use "file://${SUBSCRIPTION}" >/dev/null
+bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" sub add --name Secondary "file://${SECOND_SUBSCRIPTION}" >/dev/null
+bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" sub ls | grep -Fq Secondary
 bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" on --service-only >/dev/null
 bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" status >/dev/null
 env_output=$(bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" env)
