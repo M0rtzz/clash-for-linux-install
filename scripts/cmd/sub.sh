@@ -617,7 +617,7 @@ _sub_add_locked() {
     _logging_sub "➕ 已添加订阅：[$name] $url"
     _okcat '🎉' "订阅已添加：[$name] $url"
     if [ "$use_after_add" = true ]; then
-        _sub_use_locked "$name"
+        _sub_use_locked "$name" || return 1
     fi
     return 0
 }

@@ -148,8 +148,7 @@ _initialize_subconverter_workdir() {
         case "${name}" in
         subconverter | pref.yml | pref.example.yml | latest.log) continue ;;
         esac
-        [ -e "${BIN_SUBCONVERTER_WORK_DIR}/${name}" ] ||
-            ln -s "${item}" "${BIN_SUBCONVERTER_WORK_DIR}/${name}"
+        ln -snf "${item}" "${BIN_SUBCONVERTER_WORK_DIR}/${name}" || return 1
     done
     ln -snf "${BIN_SUBCONVERTER_CONFIG}" "${BIN_SUBCONVERTER_WORK_DIR}/pref.yml"
 }
@@ -210,7 +209,9 @@ _get_local_ip() {
 }
 
 _get_random_val() {
-    tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 6
+    local length=6
+    [ "${CLASHCTL_INSTALL_MODE}" = system ] && length=32
+    tr -dc 'a-zA-Z0-9' </dev/urandom | head -c "${length}"
 }
 
 _color_log() {

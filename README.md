@@ -82,6 +82,10 @@ system 安装同时提供真正的 `/usr/local/bin/clashctl` 和 shell hook。�
 eval "$(clashctl env)"
 ```
 
+如果使用 `systemd --user`，系统需要支持用户服务的文件系统命名空间（包括
+`PrivateTmp=true` 所需的 mount namespace 和 unprivileged user namespaces）。如果检测不到可用的
+systemd user unit，clashctl 会回退到当前用户的 PID 文件与 `nohup` 生命周期管理。
+
 诊断与旧数据迁移：
 
 ```bash

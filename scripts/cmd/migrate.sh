@@ -31,6 +31,9 @@ clashmigrate() {
     if [ -d "${legacy_resources}/profiles" ]; then
         /bin/cp -a "${legacy_resources}/profiles/." "${CLASH_PROFILES_DIR}/" || return 1
         chmod -R go-rwx "${CLASH_PROFILES_DIR}"
+        PROFILES_DIR=${CLASH_PROFILES_DIR} "${BIN_YQ}" -i \
+            '(.profiles[]? | .path) |= strenv(PROFILES_DIR) + "/" + (. | split("/") | .[-1])' \
+            "${CLASH_PROFILES_META}" || return 1
     fi
     if [ -f "${legacy_resources}/mixin.yaml" ]; then
         /usr/bin/install -m 600 "${legacy_resources}/mixin.yaml" "${CLASH_CONFIG_MIXIN}" || return 1

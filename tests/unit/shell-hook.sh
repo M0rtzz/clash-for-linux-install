@@ -32,7 +32,7 @@ if command -v fish >/dev/null 2>&1; then
         not set -q http_proxy; or exit 1
         clashctl on --env-only
         test "$all_proxy" = "socks5h://127.0.0.1:17890"; or exit 1
-    ' fish "${CLASHCTL_FAKE_LOG}" "${REPOSITORY_ROOT}/tests/fixtures" \
+    ' "${CLASHCTL_FAKE_LOG}" "${REPOSITORY_ROOT}/tests/fixtures" \
         "${REPOSITORY_ROOT}/scripts/shell/clashctl.fish"
     grep -Fxq 'status' "${CLASHCTL_FAKE_LOG}"
     grep -Fxq 'env --shell=fish' "${CLASHCTL_FAKE_LOG}"

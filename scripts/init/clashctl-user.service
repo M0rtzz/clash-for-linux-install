@@ -8,8 +8,10 @@ UMask=0077
 RuntimeDirectory=clashctl
 NoNewPrivileges=true
 PrivateTmp=true
+# Requires a systemd user manager with mount/user namespace support; service.sh
+# falls back to PID-scoped nohup when this unit cannot be started.
 ExecStart=@CLASHCTL_ROOT@/scripts/run-mihomo
-ExecStopPost=/usr/bin/rm -f %t/clashctl/mihomo.pid
+ExecStopPost=/usr/bin/rm -f %t/clashctl/@CLASHCTL_KERNEL@.pid
 Restart=on-failure
 RestartSec=1
 

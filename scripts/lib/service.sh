@@ -122,7 +122,14 @@ service_start() {
     case "$service_manager" in
     systemd-user)
         SERVICE_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
-        systemctl --user start clashctl.service
+        if systemctl --user start clashctl.service; then
+            return 0
+        fi
+        # Older user managers may not support the namespace settings used by
+        # the unit. Stop any partial activation and use the PID-scoped fallback.
+        systemctl --user stop clashctl.service >/dev/null 2>&1 || true
+        service_manager=nohup
+        _nohup_start
         ;;
     systemd)
         systemctl start "$CLASHCTL_KERNEL"

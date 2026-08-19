@@ -59,7 +59,21 @@ tun:
   enable: true
 EOF
 cat >"${LEGACY_HOME}/resources/profiles.yaml" <<'EOF'
-profiles: []
+profiles:
+  - name: Legacy
+    path: LEGACY_PROFILE_PATH
+    url: file:///legacy.yaml
+use: Legacy
+EOF
+sed -i "s|LEGACY_PROFILE_PATH|${LEGACY_HOME}/resources/profiles/Legacy.yaml|" \
+    "${LEGACY_HOME}/resources/profiles.yaml"
+cat >"${LEGACY_HOME}/resources/profiles/Legacy.yaml" <<'EOF'
+proxies:
+  - {name: LegacyNode, type: socks5, server: 127.0.0.1, port: 9}
+proxy-groups:
+  - {name: PROXY, type: select, proxies: [LegacyNode, DIRECT]}
+rules:
+  - MATCH,DIRECT
 EOF
 
 bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" migrate >/dev/null
@@ -71,4 +85,11 @@ MIXIN_CONFIG=${XDG_CONFIG_HOME}/clashctl/mixin.yaml
     (."bind-address" == "127.0.0.1") and
     (.tun.enable == false)
 ' "${MIXIN_CONFIG}" >/dev/null
+MIGRATED_PROFILE_PATH=$(
+    "${INSTALL_ROOT}/bin/yq" -r '.profiles[0].path' "${XDG_DATA_HOME}/clashctl/profiles.yaml"
+)
+[ "${MIGRATED_PROFILE_PATH}" = "${XDG_DATA_HOME}/clashctl/profiles/Legacy.yaml" ]
+[ -s "${MIGRATED_PROFILE_PATH}" ]
+"${INSTALL_ROOT}/bin/yq" -e '.profiles[0].name == "Legacy" and .use == "Legacy"' \
+    "${XDG_DATA_HOME}/clashctl/profiles.yaml" >/dev/null
 printf '%s\n' 'system migration normalization: ok'
