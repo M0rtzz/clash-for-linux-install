@@ -6,20 +6,6 @@ service_pid_path=
 
 detect_service_manager() {
     [ -n "$service_manager" ] && return 0
-    if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
-        if [ "${CLASHCTL_SERVICE_MANAGER:-}" = nohup ]; then
-            service_manager='nohup'
-        elif command -v systemctl >/dev/null 2>&1 &&
-            systemctl --user show-environment >/dev/null 2>&1 &&
-            systemctl --user cat clashctl.service >/dev/null 2>&1; then
-            service_manager=systemd-user
-        else
-            service_manager='nohup'
-        fi
-        service_log_path=${CLASH_SERVICE_LOG}
-        service_pid_path=${CLASH_PID_FILE}
-        return 0
-    fi
     [ -z "$INIT_TYPE" ] && INIT_TYPE=$(readlink /proc/1/exe 2>/dev/null || echo "nohup")
     grep -qsE "docker|kubepods|containerd|podman|lxc" /proc/1/cgroup 2>/dev/null && INIT_TYPE='nohup'
     _is_root || INIT_TYPE='nohup'
@@ -55,82 +41,9 @@ detect_service_manager() {
     }
 }
 
-service_valid_pid() {
-    SERVICE_VALID_PID=
-    [ -r "${CLASH_PID_FILE}" ] || return 1
-    [ ! -L "${CLASH_PID_FILE}" ] || return 1
-    [ "$(stat -c %u "${CLASH_PID_FILE}" 2>/dev/null)" = "${CLASHCTL_UID}" ] || return 1
-
-    local pid proc_uid proc_exe proc_cmd expected_exe
-    read -r pid <"${CLASH_PID_FILE}" || return 1
-    [[ ${pid} =~ ^[1-9][0-9]*$ ]] || return 1
-    [ -d "/proc/${pid}" ] || return 1
-    proc_uid=$(awk '/^Uid:/{print $2}' "/proc/${pid}/status" 2>/dev/null)
-    [ "${proc_uid}" = "${CLASHCTL_UID}" ] || return 1
-    proc_exe=$(readlink -f "/proc/${pid}/exe" 2>/dev/null)
-    expected_exe=$(readlink -f "${BIN_KERNEL}" 2>/dev/null)
-    [ "${proc_exe}" = "${expected_exe}" ] || return 1
-    proc_cmd=$(tr '\0' '\n' <"/proc/${pid}/cmdline" 2>/dev/null)
-    grep -Fxq "${CLASH_CONFIG_RUNTIME}" <<<"${proc_cmd}" || return 1
-    SERVICE_VALID_PID=${pid}
-}
-
-_remove_stale_pid_file() {
-    service_valid_pid >/dev/null 2>&1 || /usr/bin/rm -f -- "${CLASH_PID_FILE}"
-}
-
-_nohup_start() {
-    _remove_stale_pid_file
-    (
-        nohup "${BIN_KERNEL}" -d "${CLASH_RESOURCES_DIR}" -f "${CLASH_CONFIG_RUNTIME}" \
-            </dev/null >"${service_log_path}" 2>&1 &
-        local pid=${!}
-        local temporary_pid_file="${CLASH_PID_FILE}.${$}"
-        if ! printf '%s\n' "${pid}" >"${temporary_pid_file}" ||
-            ! chmod 600 "${temporary_pid_file}" ||
-            ! /bin/mv -f "${temporary_pid_file}" "${CLASH_PID_FILE}"; then
-            /usr/bin/rm -f -- "${temporary_pid_file}"
-            kill -TERM "${pid}" 2>/dev/null || true
-            exit 1
-        fi
-    )
-}
-
-_nohup_stop() {
-    service_valid_pid || {
-        /usr/bin/rm -f -- "${CLASH_PID_FILE}"
-        return 0
-    }
-    local pid=${SERVICE_VALID_PID} count=0
-    kill -TERM "${pid}" 2>/dev/null || true
-    while [ -d "/proc/${pid}" ] && [ "${count}" -lt 30 ]; do
-        sleep 0.1
-        count=$((count + 1))
-    done
-    if [ -d "/proc/${pid}" ] && service_valid_pid; then
-        kill -KILL "${pid}" 2>/dev/null || true
-        sleep 0.1
-        if [ -d "/proc/${pid}" ] && service_valid_pid; then
-            return 1
-        fi
-    fi
-    /usr/bin/rm -f -- "${CLASH_PID_FILE}"
-}
-
 service_start() {
     detect_service_manager
     case "$service_manager" in
-    systemd-user)
-        SERVICE_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
-        if systemctl --user start clashctl.service; then
-            return 0
-        fi
-        # Older user managers may not support the namespace settings used by
-        # the unit. Stop any partial activation and use the PID-scoped fallback.
-        systemctl --user stop clashctl.service >/dev/null 2>&1 || true
-        service_manager=nohup
-        _nohup_start
-        ;;
     systemd)
         systemctl start "$CLASHCTL_KERNEL"
         ;;
@@ -144,10 +57,6 @@ service_start() {
         sv up "$CLASHCTL_KERNEL"
         ;;
     nohup | *)
-        [ "${CLASHCTL_INSTALL_MODE}" = system ] && {
-            _nohup_start
-            return
-        }
         (
             nohup "$BIN_KERNEL" -d "$CLASH_RESOURCES_DIR" -f "$CLASH_CONFIG_RUNTIME" </dev/null >"$service_log_path" 2>&1 &
         )
@@ -156,10 +65,6 @@ service_start() {
 }
 
 service_sudo_start() {
-    [ "${CLASHCTL_INSTALL_MODE}" = system ] && {
-        _errorcat 'system 安装模式不允许使用 sudo 启动服务'
-        return 1
-    }
     _is_root && service_start && return 0
     detect_service_manager
     (
@@ -169,10 +74,6 @@ service_sudo_start() {
 }
 
 service_sudo_stop() {
-    [ "${CLASHCTL_INSTALL_MODE}" = system ] && {
-        _errorcat 'system 安装模式不允许使用 sudo 停止服务'
-        return 1
-    }
     _is_root && service_stop && return 0
     sudo pkill -TERM -x "$CLASHCTL_KERNEL" 2>/dev/null
     sleep 0.2
@@ -183,9 +84,6 @@ service_sudo_stop() {
 service_stop() {
     detect_service_manager
     case "$service_manager" in
-    systemd-user)
-        systemctl --user stop clashctl.service
-        ;;
     systemd)
         systemctl stop "$CLASHCTL_KERNEL"
         ;;
@@ -199,10 +97,6 @@ service_stop() {
         sv down "$CLASHCTL_KERNEL"
         ;;
     nohup | *)
-        [ "${CLASHCTL_INSTALL_MODE}" = system ] && {
-            _nohup_stop
-            return
-        }
         pkill -TERM -x "$CLASHCTL_KERNEL" 2>/dev/null
         sleep 0.2
         pkill -KILL -x "$CLASHCTL_KERNEL" 2>/dev/null
@@ -213,9 +107,6 @@ service_stop() {
 service_restart() {
     detect_service_manager
     case "$service_manager" in
-    systemd-user)
-        systemctl --user restart clashctl.service
-        ;;
     systemd)
         systemctl restart "$CLASHCTL_KERNEL"
         ;;
@@ -239,9 +130,6 @@ service_restart() {
 service_status() {
     detect_service_manager
     case "$service_manager" in
-    systemd-user)
-        systemctl --user status clashctl.service "${@}"
-        ;;
     systemd)
         systemctl status "$CLASHCTL_KERNEL" "$@"
         ;;
@@ -255,10 +143,6 @@ service_status() {
         sv status "$CLASHCTL_KERNEL" "$@"
         ;;
     nohup | *)
-        [ "${CLASHCTL_INSTALL_MODE}" = system ] && {
-            service_valid_pid && ps -fp "${SERVICE_VALID_PID}"
-            return
-        }
         pgrep -fa "$BIN_KERNEL"
         ;;
     esac
@@ -267,9 +151,6 @@ service_status() {
 service_is_active() {
     detect_service_manager
     case "$service_manager" in
-    systemd-user)
-        systemctl --user is-active clashctl.service >/dev/null 2>&1
-        ;;
     systemd)
         systemctl is-active "$CLASHCTL_KERNEL" >/dev/null 2>&1
         ;;
@@ -283,10 +164,6 @@ service_is_active() {
         sv status "$CLASHCTL_KERNEL" 2>/dev/null | grep -qs '^run'
         ;;
     nohup | *)
-        [ "${CLASHCTL_INSTALL_MODE}" = system ] && {
-            service_valid_pid
-            return
-        }
         pgrep -fa "$BIN_KERNEL" >/dev/null 2>&1
         ;;
     esac
@@ -295,9 +172,6 @@ service_is_active() {
 service_log() {
     detect_service_manager
     case "$service_manager" in
-    systemd-user)
-        journalctl --user-unit clashctl.service "${@}"
-        ;;
     systemd)
         journalctl -u "$CLASHCTL_KERNEL" "$@"
         ;;
@@ -314,9 +188,6 @@ service_log() {
 service_follow_log() {
     detect_service_manager
     case "$service_manager" in
-    systemd-user)
-        journalctl --user-unit clashctl.service -q -f -n 0
-        ;;
     systemd)
         journalctl -u "$CLASHCTL_KERNEL" -q -f -n 0
         ;;
@@ -329,13 +200,6 @@ service_follow_log() {
 service_read_log() {
     detect_service_manager
     case "$service_manager" in
-    systemd-user)
-        if [ -n "${SERVICE_START_TIME:-}" ]; then
-            journalctl --user-unit clashctl.service --since "${SERVICE_START_TIME}" --no-pager
-        else
-            journalctl --user-unit clashctl.service -n 100 --no-pager
-        fi
-        ;;
     systemd)
         journalctl -u "$CLASHCTL_KERNEL" --no-pager
         ;;
@@ -346,7 +210,6 @@ service_read_log() {
 }
 
 install_service() {
-    [ "${CLASHCTL_INSTALL_MODE}" = system ] && return 0
     detect_service_manager
 
     local template_dir="${CLASHCTL_SRC}/scripts/init"
@@ -474,7 +337,6 @@ install_service() {
 }
 
 uninstall_service() {
-    [ "${CLASHCTL_INSTALL_MODE}" = system ] && return 0
     detect_service_manager
     service_stop >&/dev/null
     case "$service_manager" in

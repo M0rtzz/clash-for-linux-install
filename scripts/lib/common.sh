@@ -1,190 +1,36 @@
 #!/usr/bin/env bash
 
 # shellcheck disable=SC2034
-CLASHCTL_INSTALL_MODE=${CLASHCTL_INSTALL_MODE:-user}
-CLASHCTL_UID=$(id -u)
-
-if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
-    CLASHCTL_ROOT=${CLASHCTL_ROOT:-/usr/local/lib/clashctl}
-    CLASHCTL_CONFIG_DIR=${XDG_CONFIG_HOME:-${HOME}/.config}/clashctl
-    CLASHCTL_DATA_DIR=${XDG_DATA_HOME:-${HOME}/.local/share}/clashctl
-    CLASHCTL_STATE_DIR=${XDG_STATE_HOME:-${HOME}/.local/state}/clashctl
-    if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
-        CLASHCTL_RUNTIME_DIR=${XDG_RUNTIME_DIR}/clashctl
-    elif [ -d "/run/user/${CLASHCTL_UID}" ] && [ -w "/run/user/${CLASHCTL_UID}" ]; then
-        CLASHCTL_RUNTIME_DIR=/run/user/${CLASHCTL_UID}/clashctl
-    else
-        CLASHCTL_RUNTIME_DIR=${TMPDIR:-/tmp}/clashctl-${CLASHCTL_UID}
-    fi
-    CLASHCTL_STATIC_DIR=${CLASHCTL_ROOT}/resources
-    CLASHCTL_ENV_FILE=${CLASHCTL_CONFIG_DIR}/env
-    BIN_BASE_DIR=${CLASHCTL_ROOT}/bin
-else
-    CLASHCTL_ROOT=${CLASHCTL_HOME}
-    CLASHCTL_CONFIG_DIR=${CLASHCTL_HOME}/resources
-    CLASHCTL_DATA_DIR=${CLASHCTL_HOME}/resources
-    CLASHCTL_STATE_DIR=${CLASHCTL_HOME}/resources
-    CLASHCTL_RUNTIME_DIR=${CLASHCTL_HOME}/resources
-    CLASHCTL_STATIC_DIR=${CLASHCTL_HOME}/resources
-    CLASHCTL_ENV_FILE=${CLASHCTL_HOME}/.env
-    BIN_BASE_DIR=${CLASHCTL_HOME}/bin
-fi
-
-CLASH_RESOURCES_DIR=${CLASHCTL_DATA_DIR}
-CLASH_CONFIG_BASE=${CLASHCTL_DATA_DIR}/config.yaml
-CLASH_CONFIG_MIXIN=${CLASHCTL_CONFIG_DIR}/mixin.yaml
-CLASH_CONFIG_RUNTIME=${CLASHCTL_DATA_DIR}/runtime.yaml
-CLASH_CONFIG_TEMP=${CLASHCTL_RUNTIME_DIR}/temp.yaml
+CLASH_RESOURCES_DIR="${CLASHCTL_HOME}/resources"
+CLASH_CONFIG_BASE="${CLASH_RESOURCES_DIR}/config.yaml"
+CLASH_CONFIG_MIXIN="${CLASH_RESOURCES_DIR}/mixin.yaml"
+CLASH_CONFIG_RUNTIME="${CLASH_RESOURCES_DIR}/runtime.yaml"
+CLASH_CONFIG_TEMP="${CLASH_RESOURCES_DIR}/temp.yaml"
 # 订阅下载/校验失败时保留的调试产物（稳定路径，便于排障）
-CLASH_CONFIG_DEBUG=${CLASHCTL_STATE_DIR}/last-failed.yaml
-CLASH_CONFIG_DEBUG_RAW=${CLASHCTL_STATE_DIR}/last-failed.raw
+CLASH_CONFIG_DEBUG="${CLASH_RESOURCES_DIR}/last-failed.yaml"
+CLASH_CONFIG_DEBUG_RAW="${CLASH_RESOURCES_DIR}/last-failed.raw"
 
-BIN_KERNEL=${BIN_BASE_DIR}/${CLASHCTL_KERNEL}
+BIN_BASE_DIR="${CLASHCTL_HOME}/bin"
+BIN_KERNEL="${BIN_BASE_DIR}/$CLASHCTL_KERNEL"
 BIN_YQ="${BIN_BASE_DIR}/yq"
 BIN_SUBCONVERTER_DIR="${BIN_BASE_DIR}/subconverter"
 BIN_SUBCONVERTER="${BIN_SUBCONVERTER_DIR}/subconverter"
-if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
-    BIN_SUBCONVERTER_WORK_DIR=${CLASHCTL_DATA_DIR}/subconverter
-    BIN_SUBCONVERTER_CONFIG=${CLASHCTL_CONFIG_DIR}/subconverter/pref.yml
-    BIN_SUBCONVERTER_LOG=${CLASHCTL_STATE_DIR}/subconverter.log
-else
-    BIN_SUBCONVERTER_WORK_DIR=${BIN_SUBCONVERTER_DIR}
-    BIN_SUBCONVERTER_CONFIG=${BIN_SUBCONVERTER_DIR}/pref.yml
-    BIN_SUBCONVERTER_LOG=${BIN_SUBCONVERTER_DIR}/latest.log
-fi
+BIN_SUBCONVERTER_CONFIG="$BIN_SUBCONVERTER_DIR/pref.yml"
+BIN_SUBCONVERTER_LOG="${BIN_SUBCONVERTER_DIR}/latest.log"
 
-CLASH_PROFILES_DIR=${CLASHCTL_DATA_DIR}/profiles
-CLASH_PROFILES_META=${CLASHCTL_DATA_DIR}/profiles.yaml
-CLASH_PROFILES_LOG=${CLASHCTL_STATE_DIR}/profiles.log
-CLASH_PROFILES_LOCK=${CLASHCTL_RUNTIME_DIR}/profiles.lock
-
-CLASH_PID_FILE=${CLASHCTL_RUNTIME_DIR}/${CLASHCTL_KERNEL}.pid
-CLASH_START_LOCK=${CLASHCTL_RUNTIME_DIR}/start.lock
-CLASH_SERVICE_LOG=${CLASHCTL_STATE_DIR}/${CLASHCTL_KERNEL}.log
-CLASH_SUBCONVERTER_PID_FILE=${CLASHCTL_RUNTIME_DIR}/subconverter.pid
+CLASH_PROFILES_DIR="${CLASH_RESOURCES_DIR}/profiles"
+CLASH_PROFILES_META="${CLASH_RESOURCES_DIR}/profiles.yaml"
+CLASH_PROFILES_LOG="${CLASH_RESOURCES_DIR}/profiles.log"
+CLASH_PROFILES_LOCK="${CLASH_RESOURCES_DIR}/profiles.lock"
 
 CLASHCTL_CRON_TAG="# clashctl-auto-update"
 
 _is_port_used() {
-    local port=${1}
-    if command -v ss >/dev/null 2>&1; then
-        ss -H -lntu 2>/dev/null | awk -v suffix=":${port}" '$5 ~ suffix "$" { found=1 } END { exit !found }'
-        return
-    fi
-    netstat -lntu 2>/dev/null | awk -v suffix=":${port}" '$4 ~ suffix "$" { found=1 } END { exit !found }'
+    { ss -tunlp 2>/dev/null || netstat -tunlp 2>/dev/null; } | grep -qs "$1"
 }
 
 _is_root() {
     [ "$(id -u)" -eq 0 ]
-}
-
-_path_owned_by_current_user() {
-    [ ! -L "${1}" ] || return 1
-    [ -e "${1}" ] || return 0
-    [ "$(stat -c %u "${1}" 2>/dev/null)" = "${CLASHCTL_UID}" ]
-}
-
-_path_contains_symlink() {
-    local path=${1} component prefix=/ remainder=${1#/}
-    case "${path}" in
-    /*) ;;
-    *) return 0 ;;
-    esac
-    while [ -n "${remainder}" ]; do
-        component=${remainder%%/*}
-        [ "${remainder}" = "${component}" ] && remainder= || remainder=${remainder#*/}
-        prefix="${prefix%/}/${component}"
-        [ ! -L "${prefix}" ] || return 0
-    done
-    return 1
-}
-
-_path_safe_for_user_cleanup() {
-    local path=${1} current parent owner mode
-    [ -n "${path}" ] || return 1
-    case "${path}" in
-    *'//'|*/../*|*/..|*/./*|*/.) return 1 ;;
-    esac
-    _path_contains_symlink "${path}" && return 1
-
-    current=${path}
-    while [ ! -e "${current}" ]; do
-        parent=${current%/*}
-        [ "${parent}" != "${current}" ] || return 1
-        [ -n "${parent}" ] || parent=/
-        current=${parent}
-    done
-    _path_contains_symlink "${current}" && return 1
-    owner=$(stat -c %u "${current}" 2>/dev/null) || return 1
-    [ "${owner}" = "${CLASHCTL_UID}" ] && return 0
-
-    mode=$(stat -c %a "${current}" 2>/dev/null) || return 1
-    (( 8#${mode} & 01000 )) && (( 8#${mode} & 0002 ))
-}
-
-_install_private_file() {
-    local source=${1}
-    local target=${2}
-    [ -e "${target}" ] && return 0
-    /usr/bin/install -m 600 "${source}" "${target}"
-}
-
-_link_static_resource() {
-    local name=${1}
-    local source=${CLASHCTL_STATIC_DIR}/${name}
-    local target=${CLASHCTL_DATA_DIR}/${name}
-    [ -e "${source}" ] || return 0
-    [ -e "${target}" ] && [ ! -L "${target}" ] && return 0
-    ln -snf "${source}" "${target}"
-}
-
-_initialize_subconverter_workdir() {
-    [ "${CLASHCTL_INSTALL_MODE}" = system ] || return 0
-    /usr/bin/install -d -m 700 "${BIN_SUBCONVERTER_WORK_DIR}"
-    local item name
-    for item in "${BIN_SUBCONVERTER_DIR}"/*; do
-        [ -e "${item}" ] || continue
-        name=${item##*/}
-        case "${name}" in
-        subconverter | pref.yml | pref.example.yml | latest.log) continue ;;
-        esac
-        ln -snf "${item}" "${BIN_SUBCONVERTER_WORK_DIR}/${name}" || return 1
-    done
-    ln -snf "${BIN_SUBCONVERTER_CONFIG}" "${BIN_SUBCONVERTER_WORK_DIR}/pref.yml"
-}
-
-_ensure_user_home() {
-    [ "${CLASHCTL_INSTALL_MODE}" = system ] || return 0
-    (
-        umask 077
-        _ensure_user_home_locked
-    )
-}
-
-_ensure_user_home_locked() {
-    local directory
-    for directory in "${CLASHCTL_CONFIG_DIR}" "${CLASHCTL_DATA_DIR}" \
-        "${CLASHCTL_STATE_DIR}" "${CLASHCTL_RUNTIME_DIR}" \
-        "${CLASH_PROFILES_DIR}" "${CLASHCTL_CONFIG_DIR}/subconverter"; do
-        _path_owned_by_current_user "${directory}" || {
-            _errorcat "不安全的用户目录：${directory}"
-            return 1
-        }
-        /usr/bin/install -d -m 700 "${directory}" || return 1
-    done
-
-    _install_private_file "${CLASHCTL_ROOT}/.env" "${CLASHCTL_ENV_FILE}" || return 1
-    _install_private_file "${CLASHCTL_STATIC_DIR}/mixin.yaml" "${CLASH_CONFIG_MIXIN}" || return 1
-    _install_private_file "${CLASHCTL_STATIC_DIR}/profiles.yaml" "${CLASH_PROFILES_META}" || return 1
-    _install_private_file "${BIN_SUBCONVERTER_DIR}/pref.example.yml" "${BIN_SUBCONVERTER_CONFIG}" || return 1
-    [ -e "${CLASH_CONFIG_BASE}" ] || /usr/bin/install -m 600 /dev/null "${CLASH_CONFIG_BASE}"
-    chmod 600 "${CLASHCTL_ENV_FILE}" "${CLASH_CONFIG_MIXIN}" "${CLASH_PROFILES_META}" \
-        "${BIN_SUBCONVERTER_CONFIG}" "${CLASH_CONFIG_BASE}" 2>/dev/null || return 1
-
-    _link_static_resource Country.mmdb
-    _link_static_resource geosite.dat
-    _link_static_resource dist
-    _initialize_subconverter_workdir
 }
 
 _get_random_port() {
@@ -209,9 +55,7 @@ _get_local_ip() {
 }
 
 _get_random_val() {
-    local length=6
-    [ "${CLASHCTL_INSTALL_MODE}" = system ] && length=32
-    tr -dc 'a-zA-Z0-9' </dev/urandom | head -c "${length}"
+    tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 6
 }
 
 _color_log() {
@@ -301,9 +145,9 @@ _pad() {
 }
 
 _set_env() {
-    local key=${1}
-    local value=${2}
-    local env_path=${CLASHCTL_ENV_FILE}
+    local key=$1
+    local value=$2
+    local env_path="${CLASHCTL_HOME}/.env"
 
     grep -qE "^${key}=" "$env_path" && {
         value=${value//\\/\\\\}

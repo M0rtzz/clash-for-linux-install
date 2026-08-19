@@ -7,20 +7,14 @@ clashoff() {
         ;;
     -s | --service-only)
         off_service_only || return
-        if [ "${CLASHCTL_INSTALL_MODE}" != system ] && [ -n "${http_proxy:-}" ]; then
-            _failcat '警告：当前终端代理未关闭' || true
-        fi
+        [ -n "$http_proxy" ] && _failcat "警告：当前终端代理未关闭"
         ;;
     -h | --help)
         off_help
         ;;
     *)
         off_service_only || return
-        if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
-            _failcat '若当前终端设置过代理变量，请加载 shell hook 后执行 clashctl off，或重新打开终端' || true
-        else
-            off_env_only
-        fi
+        off_env_only
         ;;
     esac
 }

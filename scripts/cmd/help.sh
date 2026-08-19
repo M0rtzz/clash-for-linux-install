@@ -13,15 +13,10 @@ Commands:
   ui                    面板地址
   sub                   订阅管理
   node                  节点切换
-  tun                   Tun 模式（system 安装禁用）
+  tun                   Tun 模式
   mixin                 Mixin 配置
   secret                Web 密钥
   log                   查看日志
-  init                  初始化当前用户
-  env                   输出代理环境变量
-  doctor                查看当前用户诊断信息
-  migrate               迁移旧版用户数据
-  uninit                清理当前用户数据
   upgrade               升级内核
 
 Global Options:

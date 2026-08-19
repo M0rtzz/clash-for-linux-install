@@ -214,71 +214,34 @@ _start_convert() {
         return 1
     }
 
-    _initialize_subconverter_workdir || return 1
-
-    # legacy 模式保留复用行为；system 模式不信任或复用其他用户的转换服务。
+    # 先在配置端口上探活：已有可用实例则直接复用（不记录 PID，_stop_convert 不误杀他人实例）
     BIN_SUBCONVERTER_PORT=$("$BIN_YQ" '.server.port' "$BIN_SUBCONVERTER_CONFIG")
     local check_url="http://localhost:${BIN_SUBCONVERTER_PORT}/version"
-    if [ "${CLASHCTL_INSTALL_MODE}" != system ]; then
-        curl --silent --fail "${check_url}" >/dev/null 2>&1 && return 0
-    fi
+    curl --silent --fail "$check_url" >/dev/null 2>&1 && return 0
 
-    # 端口被其他进程占用时换端口。system 模式还会处理并发检测后的绑定竞态。
-    local attempt=1 max_attempts=1
-    [ "${CLASHCTL_INSTALL_MODE}" = system ] && max_attempts=3
-    while [ "${attempt}" -le "${max_attempts}" ]; do
-        _detect_subconverter_port || return 1
-        check_url="http://localhost:${BIN_SUBCONVERTER_PORT}/version"
-        BIN_SUBCONVERTER_PID=$(
-            cd "${BIN_SUBCONVERTER_WORK_DIR}" || exit 1
-            "${BIN_SUBCONVERTER}" >"${BIN_SUBCONVERTER_LOG}" 2>&1 &
-            printf '%s\n' "${!}"
-        )
-        [ -n "${BIN_SUBCONVERTER_PID}" ] || return 1
-        if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
-            printf '%s\n' "${BIN_SUBCONVERTER_PID}" >"${CLASH_SUBCONVERTER_PID_FILE}"
-            chmod 600 "${CLASH_SUBCONVERTER_PID_FILE}"
-        fi
+    # 端口被其他进程占用时换端口，再拉起自己的实例并记录 PID
+    _detect_subconverter_port
+    check_url="http://localhost:${BIN_SUBCONVERTER_PORT}/version"
+    BIN_SUBCONVERTER_PID=$(
+        "$BIN_SUBCONVERTER" >"$BIN_SUBCONVERTER_LOG" 2>&1 &
+        echo $!
+    )
 
-        local check=0
-        while [ "${check}" -lt 50 ]; do
-            curl --silent --fail "${check_url}" >/dev/null 2>&1 && return 0
-            [ -d "/proc/${BIN_SUBCONVERTER_PID}" ] || break
-            sleep 0.2
-            check=$((check + 1))
-        done
-        _stop_convert
-        [ "${attempt}" -lt "${max_attempts}" ] || break
-        # A process can win the bind race after _detect_subconverter_port; pick
-        # and persist a fresh port before the next startup attempt.
-        local new_port
-        new_port=$(_get_random_port) || return 1
-        BIN_SUBCONVERTER_PORT=${new_port}
-        "${BIN_YQ}" -i ".server.port = ${new_port}" "${BIN_SUBCONVERTER_CONFIG}" 2>/dev/null || return 1
-        attempt=$((attempt + 1))
+    local start now
+    start=$(date +%s)
+    while ! curl --silent --fail "$check_url" >/dev/null 2>&1; do
+        sleep 0.2
+        now=$(date +%s)
+        [ $((now - start)) -gt 10 ] && { _errorcat "订阅转换服务未启动，请检查日志：$BIN_SUBCONVERTER_LOG"; return 1; }
     done
-    _errorcat "订阅转换服务未启动，请检查日志：${BIN_SUBCONVERTER_LOG}"
-    return 1
 }
 
 _stop_convert() {
     # 仅回收自己拉起的实例，避免误杀其他并发操作正在使用的 subconverter
     [ -n "${BIN_SUBCONVERTER_PID:-}" ] || return 0
-    if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
-        local proc_uid proc_exe expected_exe
-        proc_uid=$(awk '/^Uid:/{print $2}' "/proc/${BIN_SUBCONVERTER_PID}/status" 2>/dev/null)
-        proc_exe=$(readlink -f "/proc/${BIN_SUBCONVERTER_PID}/exe" 2>/dev/null)
-        expected_exe=$(readlink -f "${BIN_SUBCONVERTER}" 2>/dev/null)
-        if [ "${proc_uid}" != "${CLASHCTL_UID}" ] || [ "${proc_exe}" != "${expected_exe}" ]; then
-            BIN_SUBCONVERTER_PID=
-            /usr/bin/rm -f -- "${CLASH_SUBCONVERTER_PID_FILE}"
-            return 0
-        fi
-    fi
-    kill -TERM "${BIN_SUBCONVERTER_PID}" 2>/dev/null
+    kill -TERM "$BIN_SUBCONVERTER_PID" 2>/dev/null
     sleep 0.2
-    kill -KILL "${BIN_SUBCONVERTER_PID}" 2>/dev/null
+    kill -KILL "$BIN_SUBCONVERTER_PID" 2>/dev/null
     BIN_SUBCONVERTER_PID=
-    [ "${CLASHCTL_INSTALL_MODE}" = system ] && /usr/bin/rm -f -- "${CLASH_SUBCONVERTER_PID_FILE}"
     return 0
 }

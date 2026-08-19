@@ -6,10 +6,6 @@ config.yaml*
 archives/*
 !archives/dist.zip
 
-# Downloaded dependency archives and extracted Web UI build output
-resources/zip/
-resources/dist/
-
 test.sh
 
 !.gitkeep
