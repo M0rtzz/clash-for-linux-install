@@ -93,7 +93,7 @@ parse_args() {
 }
 
 _validate_system_root() {
-    local root=${CLASHCTL_ROOT}
+    local root=${CLASHCTL_ROOT} allow_unmarked=${1:-false}
     case "${root}" in
     /*) ;;
     *)
@@ -128,7 +128,7 @@ _validate_system_root() {
             _errorcat "system 安装路径必须是目录：${root}"
             return 1
         }
-        if [ ! -e "${root}/.clashctl-system" ] &&
+        if [ "${allow_unmarked}" != true ] && [ ! -e "${root}/.clashctl-system" ] &&
             [ -n "$(ls -A -- "${root}" 2>/dev/null)" ]; then
             _errorcat "system 安装路径必须为空或为已有的 clashctl 安装：${root}"
             return 1

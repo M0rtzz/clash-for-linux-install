@@ -29,7 +29,12 @@ export CLASHCTL_INSTALL_MODE
 
 if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
     _is_root || _errorcat 'system 卸载必须以 root 执行' || exit 1
-    _validate_system_root || exit 1
+    if [ "${CLASHCTL_ROOT}" = /usr/local/lib/clashctl ] &&
+        [ ! -e "${CLASHCTL_ROOT}/.clashctl-system" ]; then
+        _validate_system_root true || exit 1
+    else
+        _validate_system_root || exit 1
+    fi
     [ -f "${CLASHCTL_ROOT}/.clashctl-system" ] || {
         [ "${CLASHCTL_ROOT}" = /usr/local/lib/clashctl ] || {
             _errorcat "未找到受 clashctl 管理的 system 安装：${CLASHCTL_ROOT}"

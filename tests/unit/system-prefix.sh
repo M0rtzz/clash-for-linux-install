@@ -35,6 +35,9 @@ fi
 printf '%s\n' 'clashctl system installation' >"${TEST_ROOT}/occupied/.clashctl-system"
 _validate_system_root
 
+rm -f "${TEST_ROOT}/occupied/.clashctl-system"
+_validate_system_root true
+
 CLASHCTL_ROOT=relative-prefix
 if _validate_system_root >/dev/null 2>&1; then
     printf '%s\n' 'relative system prefix unexpectedly accepted' >&2
