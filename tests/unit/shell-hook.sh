@@ -15,6 +15,19 @@ clashctl on
 [ "${all_proxy}" = socks5h://127.0.0.1:17890 ]
 grep -Fxq 'on --service-only' "${CLASHCTL_FAKE_LOG}"
 
+clashon --service-only
+grep -Fxq 'on --service-only' "${CLASHCTL_FAKE_LOG}"
+clashoff --service-only
+grep -Fxq 'off --service-only' "${CLASHCTL_FAKE_LOG}"
+
+clashui
+grep -Fxq 'ui' "${CLASHCTL_FAKE_LOG}"
+
+for command_name in status sub node tun mixin secret log upgrade init env doctor migrate uninit help; do
+    "clash${command_name}" >/dev/null
+    grep -Fxq "${command_name}" "${CLASHCTL_FAKE_LOG}"
+done
+
 clashctl off
 [ -z "${http_proxy:-}" ]
 [ -z "${all_proxy:-}" ]
@@ -28,6 +41,10 @@ if command -v fish >/dev/null 2>&1; then
         source $argv[3]
         clashctl on
         test "$http_proxy" = "http://127.0.0.1:17890"; or exit 1
+        clashui
+        for command_name in status sub node tun mixin secret log upgrade init env doctor migrate uninit help
+            clash$command_name >/dev/null
+        end
         clashctl off
         not set -q http_proxy; or exit 1
         clashctl on --env-only
@@ -36,5 +53,9 @@ if command -v fish >/dev/null 2>&1; then
         "${REPOSITORY_ROOT}/scripts/shell/clashctl.fish"
     grep -Fxq 'status' "${CLASHCTL_FAKE_LOG}"
     grep -Fxq 'env --shell=fish' "${CLASHCTL_FAKE_LOG}"
+    grep -Fxq 'ui' "${CLASHCTL_FAKE_LOG}"
+    for command_name in status sub node tun mixin secret log upgrade init env doctor migrate uninit help; do
+        grep -Fxq "${command_name}" "${CLASHCTL_FAKE_LOG}"
+    done
     printf '%s\n' 'fish shell hook: ok'
 fi

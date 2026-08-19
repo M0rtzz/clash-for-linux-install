@@ -74,13 +74,19 @@ ${XDG_STATE_HOME:-${HOME}/.local/state}/clashctl
 ${XDG_RUNTIME_DIR:-/run/user/<uid>}/clashctl
 ```
 
-代理端口和 controller 端口按用户独立分配，只监听 `127.0.0.1`。system 模式不支持 TUN；原有 user 安装模式继续支持 TUN。
+代理端口按用户独立分配并只监听 `127.0.0.1`；controller 端口也按用户独立分配，但绑定
+`0.0.0.0` 以提供内网和公网控制台地址。每个用户会生成独立的 controller secret，请按需限制
+防火墙放行范围。system 模式不支持 TUN；原有 user 安装模式继续支持 TUN。
 
 system 安装同时提供真正的 `/usr/local/bin/clashctl` 和 shell hook。未加载 hook 时可使用：
 
 ```bash
 eval "$(clashctl env)"
 ```
+
+system 安装也兼容原有的顶层命令函数，例如 `clashon`、`clashoff`、`clashui`、`clashsub`、
+`clashnode`、`clashtun`、`clashmixin`、`clashsecret`、`clashlog` 和 `clashupgrade`；这些命令
+都会作用于当前用户自己的实例。
 
 如果使用 `systemd --user`，系统需要支持用户服务的文件系统命名空间（包括
 `PrivateTmp=true` 所需的 mount namespace 和 unprivileged user namespaces）。如果检测不到可用的

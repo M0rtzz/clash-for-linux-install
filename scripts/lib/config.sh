@@ -124,7 +124,9 @@ _reallocate_conflicting_ports() {
     controller_port=
   fi
   controller_host=${controller%:"${controller_port}"}
-  [ -n "${controller_host}" ] || controller_host=127.0.0.1
+  [ -n "${controller_host}" ] || {
+    [ "${CLASHCTL_INSTALL_MODE}" = system ] && controller_host=0.0.0.0 || controller_host=127.0.0.1
+  }
 
   local change_listener=false change_controller=false
   [ -n "${listener_port}" ] && [[ ${log_text} == *"${listener_port}"* ]] && change_listener=true
@@ -154,7 +156,7 @@ _reallocate_conflicting_ports() {
       "${CLASH_CONFIG_MIXIN}" || return 1
   fi
   if [ "${change_controller}" = true ]; then
-    [ "${CLASHCTL_INSTALL_MODE}" = system ] && controller_host=127.0.0.1
+    [ "${CLASHCTL_INSTALL_MODE}" = system ] && controller_host=0.0.0.0
     CONTROLLER_ADDR="${controller_host}:${new_controller}" \
       "${BIN_YQ}" -i '."external-controller" = strenv(CONTROLLER_ADDR)' \
       "${CLASH_CONFIG_MIXIN}" || return 1

@@ -37,3 +37,21 @@ clashctl() {
 unset_system_proxy_hook() {
     unset http_proxy HTTP_PROXY https_proxy HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
 }
+
+clashon() { clashctl on "$@"; }
+clashoff() { clashctl off "$@"; }
+clashstatus() { clashctl status "$@"; }
+clashui() { clashctl ui "$@"; }
+clashsub() { clashctl sub "$@"; }
+clashnode() { clashctl node "$@"; }
+clashtun() { clashctl tun "$@"; }
+clashmixin() { clashctl mixin "$@"; }
+clashsecret() { clashctl secret "$@"; }
+clashlog() { clashctl log "$@"; }
+clashupgrade() { clashctl upgrade "$@"; }
+clashinit() { clashctl init "$@"; }
+clashenv() { clashctl env "$@"; }
+clashdoctor() { clashctl doctor "$@"; }
+clashmigrate() { clashctl migrate "$@"; }
+clashuninit() { clashctl uninit "$@"; }
+clashhelp() { clashctl help "$@"; }
