@@ -86,9 +86,13 @@ _nohup_start() {
             </dev/null >"${service_log_path}" 2>&1 &
         local pid=${!}
         local temporary_pid_file="${CLASH_PID_FILE}.${$}"
-        printf '%s\n' "${pid}" >"${temporary_pid_file}"
-        chmod 600 "${temporary_pid_file}"
-        /bin/mv -f "${temporary_pid_file}" "${CLASH_PID_FILE}"
+        if ! printf '%s\n' "${pid}" >"${temporary_pid_file}" ||
+            ! chmod 600 "${temporary_pid_file}" ||
+            ! /bin/mv -f "${temporary_pid_file}" "${CLASH_PID_FILE}"; then
+            /usr/bin/rm -f -- "${temporary_pid_file}"
+            kill -TERM "${pid}" 2>/dev/null || true
+            exit 1
+        fi
     )
 }
 
@@ -105,6 +109,10 @@ _nohup_stop() {
     done
     if [ -d "/proc/${pid}" ] && service_valid_pid; then
         kill -KILL "${pid}" 2>/dev/null || true
+        sleep 0.1
+        if [ -d "/proc/${pid}" ] && service_valid_pid; then
+            return 1
+        fi
     fi
     /usr/bin/rm -f -- "${CLASH_PID_FILE}"
 }

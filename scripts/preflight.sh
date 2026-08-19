@@ -16,7 +16,7 @@ CLASHCTL_CMD_DIR="${CLASHCTL_HOME}/scripts/cmd"
 
 valid_required() {
     local required_cmds=("xz" "curl" "tar" 'unzip' 'gzip' 'shuf')
-    [ "${CLASHCTL_INSTALL_MODE}" = user ] && required_cmds+=("pgrep" "pkill")
+    [ "${CLASHCTL_INSTALL_MODE}" = system ] || required_cmds+=("pgrep" "pkill")
     local missing=()
     for cmd in "${required_cmds[@]}"; do
         command -v "$cmd" >&/dev/null || missing+=("$cmd")
@@ -76,7 +76,7 @@ install_system_directories() {
         "${CLASHCTL_ROOT}/resources" \
         /usr/local/bin \
         /usr/local/share/clashctl/shell \
-        /usr/lib/systemd/user
+        /usr/local/lib/systemd/user
 }
 
 install_system_clashctl() {
@@ -101,7 +101,7 @@ install_system_clashctl() {
     /usr/bin/install -m 644 "${CLASHCTL_SRC}/scripts/shell/clashctl.fish" \
         /usr/local/share/clashctl/shell/clashctl.fish
     /usr/bin/install -m 644 "${CLASHCTL_SRC}/scripts/init/clashctl-user.service" \
-        /usr/lib/systemd/user/clashctl.service
+        /usr/local/lib/systemd/user/clashctl.service
 
     printf '%s\n' '. /usr/local/share/clashctl/shell/clashctl.sh' \
         >/etc/profile.d/clashctl.sh
@@ -111,9 +111,10 @@ install_system_clashctl() {
             /etc/fish/conf.d/clashctl.fish
     fi
     find "${CLASHCTL_ROOT}" -type d -exec chmod 755 {} +
-    find "${CLASHCTL_ROOT}" -type f -exec chmod go-w {} +
+    find "${CLASHCTL_ROOT}" -type f ! -perm /111 -exec chmod 644 {} +
+    find "${CLASHCTL_ROOT}" -type f -perm /111 -exec chmod 755 {} +
     chown -R root:root "${CLASHCTL_ROOT}" /usr/local/share/clashctl \
-        /usr/local/bin/clashctl /usr/lib/systemd/user/clashctl.service
+        /usr/local/bin/clashctl /usr/local/lib/systemd/user/clashctl.service
 }
 
 prepare_zip() {

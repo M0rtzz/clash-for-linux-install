@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 
 clashui() {
-    _detect_ext_addr
+    _detect_ext_addr || return 1
     if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
         service_is_active >&/dev/null || on_service_only >/dev/null
     else
         service_is_active >&/dev/null || service_start >/dev/null
     fi
     service_is_active >&/dev/null || _errorcat "无法启动服务，请检查日志" || return
+    _detect_ext_addr || return 1
 
     if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
         printf '\nWeb 控制台：http://127.0.0.1:%s/ui\n\n' "${EXT_PORT}"

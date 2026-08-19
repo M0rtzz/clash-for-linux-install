@@ -249,6 +249,8 @@ _start_convert() {
         done
         _stop_convert
         [ "${attempt}" -lt "${max_attempts}" ] || break
+        # A process can win the bind race after _detect_subconverter_port; pick
+        # and persist a fresh port before the next startup attempt.
         local new_port
         new_port=$(_get_random_port) || return 1
         BIN_SUBCONVERTER_PORT=${new_port}

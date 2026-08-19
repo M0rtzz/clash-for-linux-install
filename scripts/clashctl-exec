@@ -2,7 +2,8 @@
 
 set -o pipefail
 CLASHCTL_INSTALL_MODE=system
-CLASHCTL_ROOT=${CLASHCTL_ROOT:-/usr/local/lib/clashctl}
+CLASHCTL_ROOT=/usr/local/lib/clashctl
+[ -n "${CLASHCTL_TEST_ROOT:-}" ] && CLASHCTL_ROOT=${CLASHCTL_TEST_ROOT}
 export CLASHCTL_INSTALL_MODE CLASHCTL_ROOT
 . "${CLASHCTL_ROOT}/scripts/cmd/clashctl.sh"
 clashctl "${@}"

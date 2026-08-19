@@ -29,7 +29,14 @@ clashuninit() {
         [[ ${answer} =~ ^[Yy]$ ]] || return 0
     fi
 
-    service_stop >/dev/null 2>&1 || true
+    service_stop >/dev/null 2>&1 || {
+        _errorcat '停止 mihomo 服务失败，已取消清理'
+        return 1
+    }
+    service_is_active >/dev/null 2>&1 && {
+        _errorcat 'mihomo 服务仍在运行，已取消清理'
+        return 1
+    }
     local target
     for target in "${CLASHCTL_CONFIG_DIR}" "${CLASHCTL_DATA_DIR}" \
         "${CLASHCTL_STATE_DIR}"; do
@@ -37,6 +44,10 @@ clashuninit() {
             _errorcat "拒绝删除不安全路径：${target}"
             return 1
         fi
+        _path_safe_for_user_cleanup "${target}" || {
+            _errorcat "拒绝删除不安全路径：${target}"
+            return 1
+        }
     done
     case "${CLASHCTL_RUNTIME_DIR##*/}" in
     clashctl | clashctl-"${CLASHCTL_UID}") ;;
@@ -45,6 +56,10 @@ clashuninit() {
         return 1
         ;;
     esac
+    _path_safe_for_user_cleanup "${CLASHCTL_RUNTIME_DIR}" || {
+        _errorcat "拒绝删除不安全路径：${CLASHCTL_RUNTIME_DIR}"
+        return 1
+    }
     /usr/bin/rm -rf -- "${CLASHCTL_CONFIG_DIR}" "${CLASHCTL_DATA_DIR}" \
         "${CLASHCTL_STATE_DIR}" "${CLASHCTL_RUNTIME_DIR}"
     _okcat '当前用户的 clashctl 数据已清理'

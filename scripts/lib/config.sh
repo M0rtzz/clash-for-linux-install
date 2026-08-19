@@ -86,36 +86,79 @@ _detect_ext_addr() {
 }
 
 _reallocate_conflicting_ports() {
-  local log_text=${1}
-  local mixed_port controller controller_port change_mixed=false change_controller=false
-  mixed_port=$("${BIN_YQ}" '.mixed-port // .port // .socks-port // ""' "${CLASH_CONFIG_RUNTIME}")
-  controller=$("${BIN_YQ}" '.external-controller // ""' "${CLASH_CONFIG_RUNTIME}")
-  controller_port=${controller##*:}
+  local log_text=${1:-}
+  local mixed_port http_port socks_port listener_key='' listener_port=''
+  IFS='|' read -r mixed_port http_port socks_port < <(
+    "${BIN_YQ}" '[.mixed-port // "", .port // "", .socks-port // ""] | join("|")' \
+      "${CLASH_CONFIG_RUNTIME}"
+  )
 
-  [[ ${log_text} == *"${mixed_port}"* ]] && change_mixed=true
-  [[ ${log_text} == *"${controller_port}"* ]] && change_controller=true
-  if [ "${change_mixed}" = false ] && [ "${change_controller}" = false ]; then
-    change_mixed=true
-    change_controller=true
+  if [ -n "${mixed_port}" ] && [[ ${log_text} == *"${mixed_port}"* ]]; then
+    listener_key=mixed-port
+    listener_port=${mixed_port}
+  elif [ -n "${http_port}" ] && [[ ${log_text} == *"${http_port}"* ]]; then
+    listener_key=port
+    listener_port=${http_port}
+  elif [ -n "${socks_port}" ] && [[ ${log_text} == *"${socks_port}"* ]]; then
+    listener_key=socks-port
+    listener_port=${socks_port}
+  elif [ -n "${mixed_port}" ]; then
+    listener_key=mixed-port
+    listener_port=${mixed_port}
+  elif [ -n "${http_port}" ]; then
+    listener_key=port
+    listener_port=${http_port}
+  elif [ -n "${socks_port}" ]; then
+    listener_key=socks-port
+    listener_port=${socks_port}
+  fi
+  if ! [[ ${listener_port:-} =~ ^[0-9]+$ ]]; then
+    listener_key=
+    listener_port=
   fi
 
-  local new_mixed=${mixed_port} new_controller=${controller_port}
-  if [ "${change_mixed}" = true ]; then
-    new_mixed=$(_get_random_port) || return 1
+  local controller controller_port controller_host
+  controller=$("${BIN_YQ}" '.external-controller // ""' "${CLASH_CONFIG_RUNTIME}")
+  controller_port=${controller##*:}
+  if ! [[ ${controller_port:-} =~ ^[0-9]+$ ]]; then
+    controller_port=
+  fi
+  controller_host=${controller%:"${controller_port}"}
+  [ -n "${controller_host}" ] || controller_host=127.0.0.1
+
+  local change_listener=false change_controller=false
+  [ -n "${listener_port}" ] && [[ ${log_text} == *"${listener_port}"* ]] && change_listener=true
+  [ -n "${controller_port}" ] && [[ ${log_text} == *"${controller_port}"* ]] && change_controller=true
+  if [ "${change_listener}" = false ] && [ "${change_controller}" = false ]; then
+    [ -n "${listener_port}" ] && change_listener=true
+    [ -n "${controller_port}" ] && change_controller=true
+  fi
+  [ "${change_listener}" = true ] || [ "${change_controller}" = true ] || return 1
+
+  local new_listener=${listener_port} new_controller=${controller_port}
+  if [ "${change_listener}" = true ]; then
+    new_listener=$(_get_random_port) || return 1
+    while [ -n "${controller_port}" ] && [ "${new_listener}" = "${controller_port}" ]; do
+      new_listener=$(_get_random_port) || return 1
+    done
   fi
   if [ "${change_controller}" = true ]; then
     new_controller=$(_get_random_port) || return 1
-    while [ "${new_controller}" = "${new_mixed}" ]; do
+    while [ -n "${new_listener}" ] && [ "${new_controller}" = "${new_listener}" ]; do
       new_controller=$(_get_random_port) || return 1
     done
   fi
 
-  MIXED_PORT=${new_mixed} CONTROLLER_ADDR="127.0.0.1:${new_controller}" \
-    "${BIN_YQ}" -i '
-      ."mixed-port" = env(MIXED_PORT) |
-      ."mixed-port" = (."mixed-port" | tonumber) |
-      ."external-controller" = strenv(CONTROLLER_ADDR)
-    ' "${CLASH_CONFIG_MIXIN}" || return 1
+  if [ "${change_listener}" = true ]; then
+    LISTENER_PORT=${new_listener} "${BIN_YQ}" -i ".\"${listener_key}\" = (strenv(LISTENER_PORT) | tonumber)" \
+      "${CLASH_CONFIG_MIXIN}" || return 1
+  fi
+  if [ "${change_controller}" = true ]; then
+    [ "${CLASHCTL_INSTALL_MODE}" = system ] && controller_host=127.0.0.1
+    CONTROLLER_ADDR="${controller_host}:${new_controller}" \
+      "${BIN_YQ}" -i '."external-controller" = strenv(CONTROLLER_ADDR)' \
+      "${CLASH_CONFIG_MIXIN}" || return 1
+  fi
   _merge_config
 }
 

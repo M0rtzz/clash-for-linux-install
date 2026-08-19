@@ -13,7 +13,7 @@ fi
 
 TEST_ROOT=$(mktemp -d)
 INSTALL_ROOT=${TEST_ROOT}/install
-export CLASHCTL_ROOT=${INSTALL_ROOT}
+export CLASHCTL_TEST_ROOT=${INSTALL_ROOT}
 export HOME=${TEST_ROOT}/home
 export XDG_CONFIG_HOME=${TEST_ROOT}/config
 export XDG_DATA_HOME=${TEST_ROOT}/data
@@ -64,4 +64,49 @@ if bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" status >/dev/null 2>&1; then
     printf '%s\n' 'service remained active after stop' >&2
     exit 1
 fi
+
+CLASHCTL_INSTALL_MODE=system
+CLASHCTL_ROOT=${INSTALL_ROOT}
+. "${INSTALL_ROOT}/.env"
+. "${REPOSITORY_ROOT}/scripts/lib/common.sh"
+. "${REPOSITORY_ROOT}/scripts/lib/config.sh"
+RECOVERY_ROOT=${TEST_ROOT}/recovery
+/usr/bin/install -d -m 700 "${RECOVERY_ROOT}"
+CLASH_CONFIG_BASE=${RECOVERY_ROOT}/base.yaml
+CLASH_CONFIG_MIXIN=${RECOVERY_ROOT}/mixin.yaml
+CLASH_CONFIG_RUNTIME=${RECOVERY_ROOT}/runtime.yaml
+CLASH_CONFIG_TEMP=${RECOVERY_ROOT}/temp.yaml
+BIN_KERNEL=/usr/bin/true
+cat >"${CLASH_CONFIG_BASE}" <<'EOF'
+port: 7890
+external-controller: 0.0.0.0:9090
+EOF
+cat >"${CLASH_CONFIG_MIXIN}" <<'EOF'
+port: 7890
+external-controller: 0.0.0.0:9090
+EOF
+cat >"${CLASH_CONFIG_RUNTIME}" <<'EOF'
+port: 7890
+external-controller: 0.0.0.0:9090
+EOF
+CLASHCTL_INSTALL_MODE=user
+_reallocate_conflicting_ports 'address already in use: 7890'
+[ "$("${INSTALL_ROOT}/bin/yq" '.mixed-port // ""' "${CLASH_CONFIG_MIXIN}")" = '' ]
+[ "$("${INSTALL_ROOT}/bin/yq" '.port' "${CLASH_CONFIG_MIXIN}")" != 7890 ]
+[ "$("${INSTALL_ROOT}/bin/yq" '.external-controller' "${CLASH_CONFIG_MIXIN}")" = 0.0.0.0:9090 ]
+
+cat >"${CLASH_CONFIG_BASE}" <<'EOF'
+external-controller: 0.0.0.0:9090
+EOF
+cat >"${CLASH_CONFIG_MIXIN}" <<'EOF'
+external-controller: 0.0.0.0:9090
+EOF
+cat >"${CLASH_CONFIG_RUNTIME}" <<'EOF'
+external-controller: 0.0.0.0:9090
+EOF
+CLASHCTL_INSTALL_MODE=system
+_reallocate_conflicting_ports 'address already in use: 9090'
+[ "$("${INSTALL_ROOT}/bin/yq" '.mixed-port // ""' "${CLASH_CONFIG_MIXIN}")" = '' ]
+[ "$("${INSTALL_ROOT}/bin/yq" '.external-controller' "${CLASH_CONFIG_MIXIN}")" != 127.0.0.1:9090 ]
+printf '%s\n' 'conflict recovery: ok'
 printf '%s\n' 'system nohup lifecycle: ok'

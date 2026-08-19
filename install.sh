@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 CLASHCTL_SRC="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# valid_env runs before parse_args, so detect --system here as well.
 for install_arg in "${@}"; do
     [ "${install_arg}" = --system ] && CLASHCTL_INSTALL_MODE=system
 done

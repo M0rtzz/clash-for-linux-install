@@ -20,3 +20,21 @@ clashctl off
 [ -z "${all_proxy:-}" ]
 grep -Fxq 'off --service-only' "${CLASHCTL_FAKE_LOG}"
 printf '%s\n' 'bash shell hook: ok'
+
+if command -v fish >/dev/null 2>&1; then
+    fish -c '
+        set -gx CLASHCTL_FAKE_LOG $argv[1]
+        set -gx PATH $argv[2] $PATH
+        source $argv[3]
+        clashctl on
+        test "$http_proxy" = "http://127.0.0.1:17890"; or exit 1
+        clashctl off
+        not set -q http_proxy; or exit 1
+        clashctl on --env-only
+        test "$all_proxy" = "socks5h://127.0.0.1:17890"; or exit 1
+    ' fish "${CLASHCTL_FAKE_LOG}" "${REPOSITORY_ROOT}/tests/fixtures" \
+        "${REPOSITORY_ROOT}/scripts/shell/clashctl.fish"
+    grep -Fxq 'status' "${CLASHCTL_FAKE_LOG}"
+    grep -Fxq 'env --shell=fish' "${CLASHCTL_FAKE_LOG}"
+    printf '%s\n' 'fish shell hook: ok'
+fi

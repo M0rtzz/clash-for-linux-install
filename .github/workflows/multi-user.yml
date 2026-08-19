@@ -1,0 +1,32 @@
+name: Multi-user integration
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  multi-user:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Prepare local dependency archives
+        run: |
+          mkdir -p archives
+          cp resources/zip/* archives/
+          sed -i 's/^GH_PROXY=.*/GH_PROXY=/' .env.install
+          sed -i 's/^CLASHCTL_CHECK_LATEST_VERSION=.*/CLASHCTL_CHECK_LATEST_VERSION=0/' .env.install
+
+      - name: Install system mode
+        run: sudo bash install.sh --system
+
+      - name: Run multi-user isolation test
+        run: sudo bash tests/integration/multi-user.sh
+
+      - name: Remove system installation
+        if: always()
+        run: sudo bash uninstall.sh --system || true

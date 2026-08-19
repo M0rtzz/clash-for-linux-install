@@ -15,10 +15,11 @@ if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
         exit 1
     }
     active_uids=()
+    expected_kernel_exe=$(readlink -f -- "${BIN_KERNEL}" 2>/dev/null || printf '%s' "${BIN_KERNEL}")
     for proc_dir in /proc/[0-9]*; do
         proc_exe=$(readlink "${proc_dir}/exe" 2>/dev/null) || continue
         case "${proc_exe}" in
-        "${BIN_KERNEL}" | "${BIN_KERNEL} (deleted)") ;;
+        "${expected_kernel_exe}" | "${expected_kernel_exe} (deleted)") ;;
         *) continue ;;
         esac
         active_uids+=("$(awk '/^Uid:/{print $2}' "${proc_dir}/status" 2>/dev/null)")
@@ -28,7 +29,7 @@ if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
         exit 1
     }
     /usr/bin/rm -rf -- "${CLASHCTL_ROOT}"
-    /usr/bin/rm -f -- /usr/local/bin/clashctl /usr/lib/systemd/user/clashctl.service \
+    /usr/bin/rm -f -- /usr/local/bin/clashctl /usr/local/lib/systemd/user/clashctl.service \
         /etc/profile.d/clashctl.sh /etc/fish/conf.d/clashctl.fish
     /usr/bin/rm -rf -- /usr/local/share/clashctl
     _okcat '✨' 'system 程序已卸载；各用户数据保持不变'

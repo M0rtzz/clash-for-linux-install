@@ -68,6 +68,7 @@ _on_service_start_locked() {
 
         log_text=$(service_read_log 2>/dev/null)
         [[ ${log_text} == *"address already in use"* ]] || {
+            service_stop >/dev/null 2>&1 || true
             _failcat "${CLASHCTL_KERNEL} 启动失败，请检查日志"
             return 1
         }

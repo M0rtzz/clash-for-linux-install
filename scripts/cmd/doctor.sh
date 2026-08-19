@@ -8,7 +8,14 @@ clashdoctor() {
         controller=$("${BIN_YQ}" '.external-controller // "-"' "${CLASH_CONFIG_RUNTIME}" 2>/dev/null)
     fi
     service_is_active >/dev/null 2>&1 && active=yes || active=no
-    service_valid_pid >/dev/null 2>&1 && pid=${SERVICE_VALID_PID}
+    detect_service_manager
+    # shellcheck disable=SC2154 # service_manager is initialized by detect_service_manager.
+    if [ "${service_manager}" = systemd-user ]; then
+        pid=$(systemctl --user show -p MainPID --value clashctl.service 2>/dev/null)
+        [[ ${pid} =~ ^[1-9][0-9]*$ ]] || pid=-
+    elif service_valid_pid >/dev/null 2>&1; then
+        pid=${SERVICE_VALID_PID}
+    fi
     [ -f "${CLASH_PROFILES_META}" ] &&
         subscription=$("${BIN_YQ}" '.use // "-"' "${CLASH_PROFILES_META}" 2>/dev/null)
 

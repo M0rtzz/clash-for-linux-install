@@ -15,7 +15,7 @@ for lib_file in "${CLASHCTL_ROOT}"/scripts/lib/*.sh; do
 done
 
 for cmd_file in "${CLASHCTL_ROOT}"/scripts/cmd/*.sh; do
-    case "${cmd_file}" in *clashctl.*) continue ;; esac
+    case "${cmd_file##*/}" in clashctl.*) continue ;; esac
     # shellcheck disable=SC1090
     . "${cmd_file}"
 done

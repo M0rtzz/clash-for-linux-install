@@ -79,9 +79,47 @@ _is_root() {
 }
 
 _path_owned_by_current_user() {
-    [ -e "${1}" ] || return 0
     [ ! -L "${1}" ] || return 1
+    [ -e "${1}" ] || return 0
     [ "$(stat -c %u "${1}" 2>/dev/null)" = "${CLASHCTL_UID}" ]
+}
+
+_path_contains_symlink() {
+    local path=${1} component prefix=/ remainder=${1#/}
+    case "${path}" in
+    /*) ;;
+    *) return 0 ;;
+    esac
+    while [ -n "${remainder}" ]; do
+        component=${remainder%%/*}
+        [ "${remainder}" = "${component}" ] && remainder= || remainder=${remainder#*/}
+        prefix="${prefix%/}/${component}"
+        [ ! -L "${prefix}" ] || return 0
+    done
+    return 1
+}
+
+_path_safe_for_user_cleanup() {
+    local path=${1} current parent owner mode
+    [ -n "${path}" ] || return 1
+    case "${path}" in
+    *'//'|*/../*|*/..|*/./*|*/.) return 1 ;;
+    esac
+    _path_contains_symlink "${path}" && return 1
+
+    current=${path}
+    while [ ! -e "${current}" ]; do
+        parent=${current%/*}
+        [ "${parent}" != "${current}" ] || return 1
+        [ -n "${parent}" ] || parent=/
+        current=${parent}
+    done
+    _path_contains_symlink "${current}" && return 1
+    owner=$(stat -c %u "${current}" 2>/dev/null) || return 1
+    [ "${owner}" = "${CLASHCTL_UID}" ] && return 0
+
+    mode=$(stat -c %a "${current}" 2>/dev/null) || return 1
+    (( 8#${mode} & 01000 )) && (( 8#${mode} & 0002 ))
 }
 
 _install_private_file() {
@@ -96,7 +134,8 @@ _link_static_resource() {
     local source=${CLASHCTL_STATIC_DIR}/${name}
     local target=${CLASHCTL_DATA_DIR}/${name}
     [ -e "${source}" ] || return 0
-    [ -e "${target}" ] || ln -s "${source}" "${target}"
+    [ -e "${target}" ] && [ ! -L "${target}" ] && return 0
+    ln -snf "${source}" "${target}"
 }
 
 _initialize_subconverter_workdir() {
@@ -117,8 +156,13 @@ _initialize_subconverter_workdir() {
 
 _ensure_user_home() {
     [ "${CLASHCTL_INSTALL_MODE}" = system ] || return 0
-    umask 077
+    (
+        umask 077
+        _ensure_user_home_locked
+    )
+}
 
+_ensure_user_home_locked() {
     local directory
     for directory in "${CLASHCTL_CONFIG_DIR}" "${CLASHCTL_DATA_DIR}" \
         "${CLASHCTL_STATE_DIR}" "${CLASHCTL_RUNTIME_DIR}" \

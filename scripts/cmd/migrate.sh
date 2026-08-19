@@ -15,7 +15,9 @@ clashmigrate() {
         _errorcat '迁移前请先执行 clashctl off'
         return 1
     }
-    [ "$(_sub_count)" -eq 0 ] || {
+    local profile_count
+    profile_count=$("${BIN_YQ}" '.profiles // [] | length' "${CLASH_PROFILES_META}" 2>/dev/null) || return 1
+    [ "${profile_count}" -eq 0 ] || {
         _errorcat '当前用户目录已经包含订阅，拒绝覆盖'
         return 1
     }
@@ -30,11 +32,29 @@ clashmigrate() {
         /bin/cp -a "${legacy_resources}/profiles/." "${CLASH_PROFILES_DIR}/" || return 1
         chmod -R go-rwx "${CLASH_PROFILES_DIR}"
     fi
-    [ -f "${legacy_resources}/mixin.yaml" ] &&
-        /usr/bin/install -m 600 "${legacy_resources}/mixin.yaml" "${CLASH_CONFIG_MIXIN}"
+    if [ -f "${legacy_resources}/mixin.yaml" ]; then
+        /usr/bin/install -m 600 "${legacy_resources}/mixin.yaml" "${CLASH_CONFIG_MIXIN}" || return 1
+    fi
+
+    local runtime_controller mixin_controller controller_port secret
+    runtime_controller=$("${BIN_YQ}" '.external-controller // ""' "${CLASH_CONFIG_RUNTIME}" 2>/dev/null) || return 1
+    mixin_controller=$("${BIN_YQ}" '.external-controller // ""' "${CLASH_CONFIG_MIXIN}" 2>/dev/null) || return 1
+    controller_port=${runtime_controller##*:}
+    [ -n "${controller_port}" ] || controller_port=${mixin_controller##*:}
+    if ! [[ ${controller_port} =~ ^[0-9]+$ ]] ||
+        ((10#${controller_port} < 1 || 10#${controller_port} > 65535)); then
+        controller_port=9090
+    fi
+
+    secret=$("${BIN_YQ}" '.secret // ""' "${CLASH_CONFIG_RUNTIME}" 2>/dev/null) || return 1
+    [ -n "${secret}" ] || secret=$("${BIN_YQ}" '.secret // ""' "${CLASH_CONFIG_MIXIN}" 2>/dev/null) || return 1
+    [ -n "${secret}" ] || secret=$(_get_random_val) || return 1
 
     # system 模式必须恢复安全监听策略和禁用 TUN。
-    "${BIN_YQ}" -i '
+    CONTROLLER_ADDR="127.0.0.1:${controller_port}" SECRET="${secret}" \
+        "${BIN_YQ}" -i '
+        ."external-controller" = strenv(CONTROLLER_ADDR) |
+        .secret = strenv(SECRET) |
         ."allow-lan" = false |
         ."bind-address" = "127.0.0.1" |
         .tun.enable = false

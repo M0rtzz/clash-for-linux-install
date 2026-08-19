@@ -25,7 +25,7 @@ tar -xf "${YQ_ARCHIVE}" -C "${INSTALL_ROOT}/bin"
 tar -xf "${SUBCONVERTER_ARCHIVE}" -C "${INSTALL_ROOT}/bin"
 /usr/bin/install -m 755 /usr/bin/true "${INSTALL_ROOT}/bin/mihomo"
 
-export CLASHCTL_ROOT=${INSTALL_ROOT}
+export CLASHCTL_TEST_ROOT=${INSTALL_ROOT}
 export HOME=${USER_HOME}
 export XDG_CONFIG_HOME=${TEST_ROOT}/config
 export XDG_DATA_HOME=${TEST_ROOT}/data
@@ -58,6 +58,14 @@ fi
 [ "$(sha256sum "${RUNTIME_CONFIG}" | awk '{print $1}')" = "${runtime_hash}" ]
 if bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" upgrade >/dev/null 2>&1; then
     printf '%s\n' 'shared kernel upgrade unexpectedly succeeded as a user command' >&2
+    exit 1
+fi
+UNSAFE_CONFIG_HOME=${TEST_ROOT}/unsafe-config
+/usr/bin/install -d -m 700 "${UNSAFE_CONFIG_HOME}"
+ln -s "${TEST_ROOT}/outside" "${UNSAFE_CONFIG_HOME}/clashctl"
+if XDG_CONFIG_HOME=${UNSAFE_CONFIG_HOME} \
+    bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" uninit --yes >/dev/null 2>&1; then
+    printf '%s\n' 'unsafe uninit path unexpectedly accepted' >&2
     exit 1
 fi
 bash "${REPOSITORY_ROOT}/scripts/clashctl-exec" uninit --yes >/dev/null
