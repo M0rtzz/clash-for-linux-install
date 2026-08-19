@@ -13,7 +13,12 @@ clashon() {
         ;;
     *)
         on_service_only || return
-        on_env_only
+        if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
+            # shellcheck disable=SC2016
+            _okcat '未加载 shell hook 时，请执行：eval "$(clashctl env)"'
+        else
+            on_env_only
+        fi
         ;;
     esac
 }
@@ -32,13 +37,56 @@ on_service_only() {
         _okcat "$CLASHCTL_KERNEL 已运行"
         return 0
     }
-    _detect_proxy_port
-    service_start
-    service_is_active >&/dev/null || {
-        _failcat "$CLASHCTL_KERNEL 启动失败"
-        return 1
-    }
+    if [ "${CLASHCTL_INSTALL_MODE}" = system ] && command -v flock >/dev/null 2>&1; then
+        (
+            flock -w 30 9 || exit 1
+            _on_service_start_locked
+        ) 9>>"${CLASH_START_LOCK}" || return 1
+    else
+        _on_service_start_locked || return 1
+    fi
     _okcat "$CLASHCTL_KERNEL 已启动"
+}
+
+_on_service_start_locked() {
+    local attempt=1 log_text
+    while [ "${attempt}" -le 5 ]; do
+        _detect_proxy_port || return 1
+        _detect_ext_addr || return 1
+        service_start >/dev/null 2>&1
+
+        local check=0
+        while [ "${check}" -lt 50 ]; do
+            if service_is_active >/dev/null 2>&1; then
+                if [ "${CLASHCTL_INSTALL_MODE}" != system ] || _service_healthcheck; then
+                    return 0
+                fi
+            fi
+            sleep 0.1
+            check=$((check + 1))
+        done
+
+        log_text=$(service_read_log 2>/dev/null)
+        [[ ${log_text} == *"address already in use"* ]] || {
+            _failcat "${CLASHCTL_KERNEL} 启动失败，请检查日志"
+            return 1
+        }
+        service_stop >/dev/null 2>&1 || true
+        _reallocate_conflicting_ports "${log_text}" || return 1
+        attempt=$((attempt + 1))
+    done
+    _failcat "${CLASHCTL_KERNEL} 启动失败：端口冲突重试次数已用尽"
+}
+
+_service_healthcheck() {
+    local controller secret auth=()
+    controller=$("${BIN_YQ}" '.external-controller // ""' "${CLASH_CONFIG_RUNTIME}" 2>/dev/null)
+    [ -n "${controller}" ] || return 1
+    controller="127.0.0.1:${controller##*:}"
+    secret=$(_get_secret)
+    [ -n "${secret}" ] && auth=(-H "Authorization: Bearer ${secret}")
+    curl --silent --fail --noproxy '*' --max-time 1 "${auth[@]}" \
+        "http://${controller}/version" >/dev/null 2>&1
 }
 
 on_help() {

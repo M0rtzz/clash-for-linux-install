@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+CLASHCTL_INSTALL_MODE=system
+CLASHCTL_ROOT=${CLASHCTL_ROOT:-/usr/local/lib/clashctl}
+export CLASHCTL_INSTALL_MODE CLASHCTL_ROOT
+. "${CLASHCTL_ROOT}/.env"
+for library in "${CLASHCTL_ROOT}"/scripts/lib/*.sh; do
+    # shellcheck disable=SC1090
+    . "${library}"
+done
+_ensure_user_home || exit 1
+
+temporary_pid_file="${CLASH_PID_FILE}.${$}"
+printf '%s\n' "${$}" >"${temporary_pid_file}"
+chmod 600 "${temporary_pid_file}"
+/bin/mv -f "${temporary_pid_file}" "${CLASH_PID_FILE}"
+trap '/usr/bin/rm -f -- "${CLASH_PID_FILE}"' EXIT
+exec "${BIN_KERNEL}" -d "${CLASH_RESOURCES_DIR}" -f "${CLASH_CONFIG_RUNTIME}"

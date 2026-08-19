@@ -48,7 +48,10 @@ _detect_proxy_port() {
     }
   done
 
-  [ "$count" -gt 0 ] && _merge_config
+  if [ "${count}" -gt 0 ]; then
+    _merge_config || return 1
+  fi
+  return 0
 }
 
 _detect_ext_addr() {
@@ -60,6 +63,7 @@ _detect_ext_addr() {
 
   EXT_IP=$ext_ip
   EXT_PORT=$ext_port
+  # shellcheck disable=SC2034 # EXT_IP is consumed by command modules after sourcing.
   [ "$ext_ip" = '0.0.0.0' ] && EXT_IP=$(_get_local_ip)
 
   local service_active=false
@@ -68,11 +72,51 @@ _detect_ext_addr() {
   _is_port_used "$EXT_PORT" && [ "$service_active" != "true" ] && {
     local new_port
     new_port=$(_get_random_port) || return
+    local proxy_ports
+    proxy_ports=$("${BIN_YQ}" '[.mixed-port, .port, .socks-port] | .[] | select(. != null)' "${CLASH_CONFIG_RUNTIME}")
+    while grep -Fxq "${new_port}" <<<"${proxy_ports}"; do
+      new_port=$(_get_random_port) || return
+    done
     _failcat '🎯' "端口冲突：[external-controller] ${EXT_PORT} 🎲 随机分配 $new_port"
     EXT_PORT=$new_port
     EXT_ADDR="$ext_ip:$new_port" "$BIN_YQ" -i '.external-controller = env(EXT_ADDR)' "$CLASH_CONFIG_MIXIN"
-    _merge_config
+    _merge_config || return 1
   }
+  return 0
+}
+
+_reallocate_conflicting_ports() {
+  local log_text=${1}
+  local mixed_port controller controller_port change_mixed=false change_controller=false
+  mixed_port=$("${BIN_YQ}" '.mixed-port // .port // .socks-port // ""' "${CLASH_CONFIG_RUNTIME}")
+  controller=$("${BIN_YQ}" '.external-controller // ""' "${CLASH_CONFIG_RUNTIME}")
+  controller_port=${controller##*:}
+
+  [[ ${log_text} == *"${mixed_port}"* ]] && change_mixed=true
+  [[ ${log_text} == *"${controller_port}"* ]] && change_controller=true
+  if [ "${change_mixed}" = false ] && [ "${change_controller}" = false ]; then
+    change_mixed=true
+    change_controller=true
+  fi
+
+  local new_mixed=${mixed_port} new_controller=${controller_port}
+  if [ "${change_mixed}" = true ]; then
+    new_mixed=$(_get_random_port) || return 1
+  fi
+  if [ "${change_controller}" = true ]; then
+    new_controller=$(_get_random_port) || return 1
+    while [ "${new_controller}" = "${new_mixed}" ]; do
+      new_controller=$(_get_random_port) || return 1
+    done
+  fi
+
+  MIXED_PORT=${new_mixed} CONTROLLER_ADDR="127.0.0.1:${new_controller}" \
+    "${BIN_YQ}" -i '
+      ."mixed-port" = env(MIXED_PORT) |
+      ."mixed-port" = (."mixed-port" | tonumber) |
+      ."external-controller" = strenv(CONTROLLER_ADDR)
+    ' "${CLASH_CONFIG_MIXIN}" || return 1
+  _merge_config
 }
 
 _get_secret() {
@@ -193,6 +237,14 @@ _is_tun_enabled() {
 }
 _merge_config_restart() {
   local was_tun_active
+
+  if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
+    _merge_config || return 1
+    service_stop >/dev/null 2>&1 || true
+    sleep 0.1
+    on_service_only >/dev/null || return 2
+    return 0
+  fi
 
   tunstatus >&/dev/null && was_tun_active=true
   # rc=1：合并/校验失败（runtime 已由 _merge_config 回滚为旧配置）

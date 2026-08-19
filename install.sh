@@ -1,13 +1,30 @@
 #!/usr/bin/env bash
 
 CLASHCTL_SRC="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+for install_arg in "${@}"; do
+    [ "${install_arg}" = --system ] && CLASHCTL_INSTALL_MODE=system
+done
+export CLASHCTL_INSTALL_MODE
 . "$CLASHCTL_SRC/scripts/preflight.sh"
 
 valid_env
 parse_args "$@"
 
+if [ "${CLASHCTL_INSTALL_MODE}" = system ] && [ "${CLASHCTL_KERNEL}" != mihomo ]; then
+    _errorcat 'system 安装模式当前仅支持 mihomo 内核'
+    exit 1
+fi
+
 _okcat "安装内核：$CLASHCTL_KERNEL"
-_okcat '📦' "安装路径：$CLASHCTL_HOME"
+_okcat '📦' "安装路径：${CLASHCTL_ROOT}"
+
+if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
+    install_system_directories
+    prepare_zip
+    install_system_clashctl
+    _okcat '🎉' 'system 安装完成；普通用户可执行 clashctl init'
+    exit 0
+fi
 
 prepare_zip
 

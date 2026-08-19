@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+CLASHCTL_INSTALL_MODE=system
+CLASHCTL_ROOT=${CLASHCTL_ROOT:-/usr/local/lib/clashctl}
+export CLASHCTL_INSTALL_MODE CLASHCTL_ROOT
+. "${CLASHCTL_ROOT}/scripts/cmd/clashctl.sh"
+clashctl "${@}"

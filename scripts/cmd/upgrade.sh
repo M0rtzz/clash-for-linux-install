@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 
 clashupgrade() {
+    if [ "${CLASHCTL_INSTALL_MODE}" = system ]; then
+        _errorcat 'system 安装的共享内核只能由管理员通过 install.sh --system 升级'
+        return 1
+    fi
     local arg channel="" log_flag=false
     for arg in "$@"; do
         case $arg in
