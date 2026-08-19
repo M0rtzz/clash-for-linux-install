@@ -9,9 +9,9 @@ function clashctl
             if contains -- -s $rest; or contains -- --service-only $rest; or contains -- -h $rest; or contains -- --help $rest
                 command clashctl $argv
             else if contains -- -e $rest; or contains -- --env-only $rest
-                command clashctl status >/dev/null; and command clashctl env --shell=fish | source
+                command clashctl status >/dev/null; and command clashctl env --shell=fish | source; and command clashctl on --env-only
             else
-                command clashctl on --service-only $rest; and command clashctl env --shell=fish | source
+                command clashctl on --service-only $rest; and command clashctl env --shell=fish | source; and command clashctl on --env-only
             end
         case off
             set -l rest $argv[2..-1]

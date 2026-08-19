@@ -14,6 +14,7 @@ clashctl on
 [ "${http_proxy}" = http://127.0.0.1:17890 ]
 [ "${all_proxy}" = socks5h://127.0.0.1:17890 ]
 grep -Fxq 'on --service-only' "${CLASHCTL_FAKE_LOG}"
+grep -Fxq 'on --env-only' "${CLASHCTL_FAKE_LOG}"
 
 clashon --service-only
 grep -Fxq 'on --service-only' "${CLASHCTL_FAKE_LOG}"
@@ -53,6 +54,7 @@ if command -v fish >/dev/null 2>&1; then
         "${REPOSITORY_ROOT}/scripts/shell/clashctl.fish"
     grep -Fxq 'status' "${CLASHCTL_FAKE_LOG}"
     grep -Fxq 'env --shell=fish' "${CLASHCTL_FAKE_LOG}"
+    grep -Fxq 'on --env-only' "${CLASHCTL_FAKE_LOG}"
     grep -Fxq 'ui' "${CLASHCTL_FAKE_LOG}"
     for command_name in status sub node tun mixin secret log upgrade init env doctor migrate uninit help; do
         grep -Fxq "${command_name}" "${CLASHCTL_FAKE_LOG}"

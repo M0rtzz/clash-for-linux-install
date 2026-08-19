@@ -11,10 +11,12 @@ clashctl() {
         -e | --env-only)
             command clashctl status >/dev/null || return
             eval "$(command clashctl env --shell=bash)"
+            command clashctl on --env-only
             ;;
         *)
             command clashctl on --service-only "${@}" || return
             eval "$(command clashctl env --shell=bash)"
+            command clashctl on --env-only
             ;;
         esac
         ;;
