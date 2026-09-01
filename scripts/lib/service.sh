@@ -83,7 +83,7 @@ _nohup_start() {
     _remove_stale_pid_file
     (
         nohup "${BIN_KERNEL}" -d "${CLASH_RESOURCES_DIR}" -f "${CLASH_CONFIG_RUNTIME}" \
-            </dev/null >"${service_log_path}" 2>&1 &
+            </dev/null >"${service_log_path}" 2>&1 9>&- &
         local pid=${!}
         local temporary_pid_file="${CLASH_PID_FILE}.${$}"
         if ! printf '%s\n' "${pid}" >"${temporary_pid_file}" ||
@@ -149,7 +149,8 @@ service_start() {
             return
         }
         (
-            nohup "$BIN_KERNEL" -d "$CLASH_RESOURCES_DIR" -f "$CLASH_CONFIG_RUNTIME" </dev/null >"$service_log_path" 2>&1 &
+            nohup "${BIN_KERNEL}" -d "${CLASH_RESOURCES_DIR}" -f "${CLASH_CONFIG_RUNTIME}" \
+                </dev/null >"${service_log_path}" 2>&1 9>&- &
         )
         ;;
     esac

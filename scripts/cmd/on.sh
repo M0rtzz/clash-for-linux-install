@@ -40,7 +40,7 @@ on_service_only() {
     if [ "${CLASHCTL_INSTALL_MODE}" = system ] && command -v flock >/dev/null 2>&1; then
         (
             flock -w 30 9 || exit 1
-            _on_service_start_locked
+            _on_service_start_locked 9>&-
         ) 9>>"${CLASH_START_LOCK}" || return 1
     else
         _on_service_start_locked || return 1

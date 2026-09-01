@@ -34,6 +34,5 @@ grep -Fxq 'node ls' "${CALL_LOG}"
 grep -Fxq 'on --service-only' "${CALL_LOG}"
 grep -Fxq 'env --shell=zsh' "${CALL_LOG}"
 grep -Fxq 'on --env-only' "${CALL_LOG}"
-grep -Fxq 'off --service-only' "${CALL_LOG}"
-grep -Fxq 'off --env-only' "${CALL_LOG}"
+grep -Fxq 'off' "${CALL_LOG}"
 printf '%s\n' 'user zsh hook: ok'

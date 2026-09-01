@@ -8,6 +8,7 @@ bash "${TEST_ROOT}/unit/system-prefix.sh"
 bash "${TEST_ROOT}/unit/system-init.sh"
 bash "${TEST_ROOT}/unit/system-migrate.sh"
 bash "${TEST_ROOT}/unit/system-service.sh"
+bash "${TEST_ROOT}/unit/profiles-lock.sh"
 bash "${TEST_ROOT}/unit/shell-hook.sh"
 bash "${TEST_ROOT}/unit/user-zsh-hook.sh"
 printf '%s\n' 'unit tests: ok'

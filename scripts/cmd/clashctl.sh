@@ -38,9 +38,8 @@ if [ -n "${ZSH_VERSION:-}" ]; then
                 _clashctl_user_exec off --env-only
                 ;;
             *)
-                _clashctl_user_exec off --service-only "${@}" || return
+                _clashctl_user_exec off "${@}" || return
                 unset http_proxy HTTP_PROXY https_proxy HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
-                _clashctl_user_exec off --env-only
                 ;;
             esac
             ;;

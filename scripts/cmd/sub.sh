@@ -142,8 +142,10 @@ _with_profiles_lock() {
             _errorcat "另一订阅操作正在进行（可能是定时更新），请稍后再试"
             exit 1
         }
-        "$@"
-    ) 9>>"$CLASH_PROFILES_LOCK"
+        # Keep the lock in this subshell while hiding fd 9 from the called
+        # function, so a restarted mihomo process cannot inherit the lock.
+        "${@}" 9>&-
+    ) 9>>"${CLASH_PROFILES_LOCK}"
 }
 
 # 下载并校验订阅到独立的临时工作文件（mktemp，避免固定路径的并发互踩）。
@@ -568,7 +570,11 @@ ${_SUB_DL_DEBUG_HINT:-转换日志：$BIN_SUBCONVERTER_LOG}"
         return 1
     }
 
-    _with_profiles_lock _sub_add_locked "$name" "$url" "$use_after_add" "$_SUB_DL_FILE" "$FETCH_USERINFO" "$FETCH_FILENAME"
+    local rc=0
+    _with_profiles_lock _sub_add_locked "${name}" "${url}" "${use_after_add}" "${_SUB_DL_FILE}" \
+        "${FETCH_USERINFO}" "${FETCH_FILENAME}" || rc=${?}
+    [ "${rc}" -eq 0 ] || /usr/bin/rm -f -- "${_SUB_DL_FILE}"
+    return "${rc}"
 }
 
 # 临界区：确定唯一名称/路径、落盘、写入元数据（可选立即启用）
