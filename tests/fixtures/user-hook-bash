@@ -1,0 +1,10 @@
+#!/bin/bash
+
+printf '%s\n' "${*:4}" >>"${CLASHCTL_FAKE_LOG}"
+case "${4:-}" in
+env)
+    printf '%s\n' \
+        'export http_proxy=http://127.0.0.1:17890' \
+        'export all_proxy=socks5h://127.0.0.1:17890'
+    ;;
+esac
